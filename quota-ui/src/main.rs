@@ -32,153 +32,246 @@ pub enum HoveredLogo {
     Gemini,
 }
 
-struct BtnArea {
-    btn: ActionBtn,
-    x: i32,
-    y: i32,
-    w: i32,
-    h: i32,
+#[derive(Clone)]
+pub struct BtnArea {
+    pub btn: ActionBtn,
+    pub x: i32,
+    pub y: i32,
+    pub w: i32,
+    pub h: i32,
 }
 
-struct LogoArea {
-    logo: HoveredLogo,
-    name: &'static str,
-    x: i32,
-    y: i32,
-    w: i32,
-    h: i32,
+#[derive(Clone)]
+pub struct LogoArea {
+    pub logo: HoveredLogo,
+    pub name: &'static str,
+    pub x: i32,
+    pub y: i32,
+    pub w: i32,
+    pub h: i32,
+    pub tooltip_anchor: (i32, i32),
 }
 
-/// Dynamic dimensions:
-/// When NOT hovered: Ultra-compact, only Logo + Ring Meters (Horizontal: 208px, Vertical: 168px)
-/// When hovered: Extends to reveal control buttons (Horizontal: +58px = 266px, Vertical: +48px = 216px)
-fn get_dimensions(cfg: &AppConfig, is_hovered: bool) -> (usize, usize) {
-    let (base_w, base_h) = match (cfg.orientation, is_hovered) {
-        (Orientation::Horizontal, false) => (208, 38),
-        (Orientation::Horizontal, true) => (266, 38),
-        (Orientation::Vertical, false) => (44, 168),
-        (Orientation::Vertical, true) => (44, 216),
-    };
-    let multiplier = match cfg.scale {
-        ScaleSize::Small => 0.88,
-        ScaleSize::Normal => 1.0,
-        ScaleSize::Large => 1.22,
-    };
-    (
-        ((base_w as f64) * multiplier).round() as usize,
-        ((base_h as f64) * multiplier).round() as usize,
-    )
+pub struct LayoutMetrics {
+    pub win_w: usize,
+    pub win_h: usize,
+    pub grip_pos: (i32, i32),
+    pub claude_logo: (i32, i32),
+    pub claude_gauge: (i32, i32),
+    pub codex_logo: (i32, i32),
+    pub codex_gauge: (i32, i32),
+    pub gemini_logo: (i32, i32),
+    pub gemini_gauge: (i32, i32),
+    pub dividers: Vec<i32>,
+    pub btn_divider: Option<i32>,
+    pub buttons: Vec<BtnArea>,
+    pub logos: Vec<LogoArea>,
 }
 
-fn get_button_areas(w: usize, h: usize, orientation: Orientation) -> Vec<BtnArea> {
-    let mut areas = Vec::new();
-    match orientation {
-        Orientation::Horizontal => {
-            let btn_size = 10;
-            let gap = 4;
-            let total_w = 4 * btn_size + 3 * gap;
-            let start_x = w as i32 - total_w - 9;
-            let start_y = (h as i32 - btn_size) / 2;
-
-            let btns = [
-                ActionBtn::Orientation,
-                ActionBtn::Resize,
-                ActionBtn::Refresh,
-                ActionBtn::Close,
-            ];
-            for (i, &b) in btns.iter().enumerate() {
-                areas.push(BtnArea {
-                    btn: b,
-                    x: start_x + (i as i32) * (btn_size + gap),
-                    y: start_y,
-                    w: btn_size,
-                    h: btn_size,
-                });
+pub fn compute_layout(cfg: &AppConfig, is_hovered: bool) -> LayoutMetrics {
+    match cfg.orientation {
+        Orientation::Horizontal => match cfg.scale {
+            ScaleSize::Small => {
+                let win_h = 30;
+                let (win_w, btn_div, buttons) = if is_hovered {
+                    let btns = vec![
+                        BtnArea { btn: ActionBtn::Orientation, x: 155, y: 11, w: 9, h: 9 },
+                        BtnArea { btn: ActionBtn::Resize, x: 166, y: 11, w: 9, h: 9 },
+                        BtnArea { btn: ActionBtn::Refresh, x: 177, y: 11, w: 9, h: 9 },
+                        BtnArea { btn: ActionBtn::Close, x: 188, y: 11, w: 9, h: 9 },
+                    ];
+                    (202, Some(149), btns)
+                } else {
+                    (150, None, Vec::new())
+                };
+                LayoutMetrics {
+                    win_w,
+                    win_h,
+                    grip_pos: (6, 10),
+                    claude_logo: (16, 10),
+                    claude_gauge: (40, 15),
+                    codex_logo: (63, 10),
+                    codex_gauge: (87, 15),
+                    gemini_logo: (110, 10),
+                    gemini_gauge: (134, 15),
+                    dividers: vec![55, 102],
+                    btn_divider: btn_div,
+                    buttons,
+                    logos: vec![
+                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 14, y: 3, w: 14, h: 24, tooltip_anchor: (21, 8) },
+                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 61, y: 3, w: 14, h: 24, tooltip_anchor: (68, 8) },
+                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 108, y: 3, w: 14, h: 24, tooltip_anchor: (115, 8) },
+                    ],
+                }
             }
-        }
-        Orientation::Vertical => {
-            let btn_size = 10;
-            let gap = 4;
-            let total_h = 4 * btn_size + 3 * gap;
-            let start_x = (w as i32 - btn_size) / 2;
-            let start_y = h as i32 - total_h - 8;
-
-            let btns = [
-                ActionBtn::Orientation,
-                ActionBtn::Resize,
-                ActionBtn::Refresh,
-                ActionBtn::Close,
-            ];
-            for (i, &b) in btns.iter().enumerate() {
-                areas.push(BtnArea {
-                    btn: b,
-                    x: start_x,
-                    y: start_y + (i as i32) * (btn_size + gap),
-                    w: btn_size,
-                    h: btn_size,
-                });
+            ScaleSize::Normal => {
+                let win_h = 40;
+                let (win_w, btn_div, buttons) = if is_hovered {
+                    let btns = vec![
+                        BtnArea { btn: ActionBtn::Orientation, x: 208, y: 15, w: 12, h: 12 },
+                        BtnArea { btn: ActionBtn::Resize, x: 222, y: 15, w: 12, h: 12 },
+                        BtnArea { btn: ActionBtn::Refresh, x: 236, y: 15, w: 12, h: 12 },
+                        BtnArea { btn: ActionBtn::Close, x: 250, y: 15, w: 12, h: 12 },
+                    ];
+                    (268, Some(201), btns)
+                } else {
+                    (202, None, Vec::new())
+                };
+                LayoutMetrics {
+                    win_w,
+                    win_h,
+                    grip_pos: (7, 15),
+                    claude_logo: (20, 13),
+                    claude_gauge: (53, 20),
+                    codex_logo: (84, 13),
+                    codex_gauge: (117, 20),
+                    gemini_logo: (148, 13),
+                    gemini_gauge: (181, 20),
+                    dividers: vec![75, 139],
+                    btn_divider: btn_div,
+                    buttons,
+                    logos: vec![
+                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 18, y: 4, w: 18, h: 32, tooltip_anchor: (27, 10) },
+                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 82, y: 4, w: 18, h: 32, tooltip_anchor: (91, 10) },
+                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 146, y: 4, w: 18, h: 32, tooltip_anchor: (155, 10) },
+                    ],
+                }
             }
-        }
-    }
-    areas
-}
-
-fn get_logo_areas(h: usize, orientation: Orientation) -> Vec<LogoArea> {
-    match orientation {
-        Orientation::Horizontal => vec![
-            LogoArea {
-                logo: HoveredLogo::Claude,
-                name: "Claude",
-                x: 16,
-                y: 6,
-                w: 18,
-                h: (h as i32) - 12,
-            },
-            LogoArea {
-                logo: HoveredLogo::Codex,
-                name: "Codex",
-                x: 81,
-                y: 6,
-                w: 18,
-                h: (h as i32) - 12,
-            },
-            LogoArea {
-                logo: HoveredLogo::Gemini,
-                name: "Gemini",
-                x: 146,
-                y: 6,
-                w: 18,
-                h: (h as i32) - 12,
-            },
-        ],
-        Orientation::Vertical => {
-            vec![
-                LogoArea {
-                    logo: HoveredLogo::Claude,
-                    name: "Claude",
-                    x: 6,
-                    y: 18,
-                    w: 32,
-                    h: 18,
-                },
-                LogoArea {
-                    logo: HoveredLogo::Codex,
-                    name: "Codex",
-                    x: 6,
-                    y: 71,
-                    w: 32,
-                    h: 18,
-                },
-                LogoArea {
-                    logo: HoveredLogo::Gemini,
-                    name: "Gemini",
-                    x: 6,
-                    y: 124,
-                    w: 32,
-                    h: 18,
-                },
-            ]
-        }
+            ScaleSize::Large => {
+                let win_h = 58;
+                let (win_w, btn_div, buttons) = if is_hovered {
+                    let btns = vec![
+                        BtnArea { btn: ActionBtn::Orientation, x: 295, y: 22, w: 16, h: 16 },
+                        BtnArea { btn: ActionBtn::Resize, x: 315, y: 22, w: 16, h: 16 },
+                        BtnArea { btn: ActionBtn::Refresh, x: 335, y: 22, w: 16, h: 16 },
+                        BtnArea { btn: ActionBtn::Close, x: 355, y: 22, w: 16, h: 16 },
+                    ];
+                    (380, Some(287), btns)
+                } else {
+                    (288, None, Vec::new())
+                };
+                LayoutMetrics {
+                    win_w,
+                    win_h,
+                    grip_pos: (9, 19),
+                    claude_logo: (28, 19),
+                    claude_gauge: (76, 29),
+                    codex_logo: (119, 19),
+                    codex_gauge: (167, 29),
+                    gemini_logo: (210, 19),
+                    gemini_gauge: (258, 29),
+                    dividers: vec![107, 198],
+                    btn_divider: btn_div,
+                    buttons,
+                    logos: vec![
+                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 25, y: 6, w: 26, h: 46, tooltip_anchor: (38, 14) },
+                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 116, y: 6, w: 26, h: 46, tooltip_anchor: (129, 14) },
+                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 207, y: 6, w: 26, h: 46, tooltip_anchor: (220, 14) },
+                    ],
+                }
+            }
+        },
+        Orientation::Vertical => match cfg.scale {
+            ScaleSize::Small => {
+                let win_w = 36;
+                let (win_h, btn_div, buttons) = if is_hovered {
+                    let btns = vec![
+                        BtnArea { btn: ActionBtn::Orientation, x: 14, y: 135, w: 9, h: 9 },
+                        BtnArea { btn: ActionBtn::Resize, x: 14, y: 146, w: 9, h: 9 },
+                        BtnArea { btn: ActionBtn::Refresh, x: 14, y: 157, w: 9, h: 9 },
+                        BtnArea { btn: ActionBtn::Close, x: 14, y: 168, w: 9, h: 9 },
+                    ];
+                    (182, Some(129), btns)
+                } else {
+                    (130, None, Vec::new())
+                };
+                LayoutMetrics {
+                    win_w,
+                    win_h,
+                    grip_pos: (13, 6),
+                    claude_logo: (13, 14),
+                    claude_gauge: (18, 35),
+                    codex_logo: (13, 54),
+                    codex_gauge: (18, 75),
+                    gemini_logo: (13, 94),
+                    gemini_gauge: (18, 115),
+                    dividers: vec![49, 89],
+                    btn_divider: btn_div,
+                    buttons,
+                    logos: vec![
+                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 4, y: 12, w: 28, h: 14, tooltip_anchor: (18, 11) },
+                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 4, y: 52, w: 28, h: 14, tooltip_anchor: (18, 51) },
+                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 4, y: 92, w: 28, h: 14, tooltip_anchor: (18, 91) },
+                    ],
+                }
+            }
+            ScaleSize::Normal => {
+                let win_w = 46;
+                let (win_h, btn_div, buttons) = if is_hovered {
+                    let btns = vec![
+                        BtnArea { btn: ActionBtn::Orientation, x: 17, y: 176, w: 12, h: 12 },
+                        BtnArea { btn: ActionBtn::Resize, x: 17, y: 190, w: 12, h: 12 },
+                        BtnArea { btn: ActionBtn::Refresh, x: 17, y: 204, w: 12, h: 12 },
+                        BtnArea { btn: ActionBtn::Close, x: 17, y: 218, w: 12, h: 12 },
+                    ];
+                    (236, Some(169), btns)
+                } else {
+                    (170, None, Vec::new())
+                };
+                LayoutMetrics {
+                    win_w,
+                    win_h,
+                    grip_pos: (18, 7),
+                    claude_logo: (16, 18),
+                    claude_gauge: (23, 46),
+                    codex_logo: (16, 70),
+                    codex_gauge: (23, 98),
+                    gemini_logo: (16, 122),
+                    gemini_gauge: (23, 150),
+                    dividers: vec![64, 116],
+                    btn_divider: btn_div,
+                    buttons,
+                    logos: vec![
+                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 5, y: 16, w: 36, h: 17, tooltip_anchor: (23, 15) },
+                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 5, y: 68, w: 36, h: 17, tooltip_anchor: (23, 67) },
+                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 5, y: 120, w: 36, h: 17, tooltip_anchor: (23, 119) },
+                    ],
+                }
+            }
+            ScaleSize::Large => {
+                let win_w = 64;
+                let (win_h, btn_div, buttons) = if is_hovered {
+                    let btns = vec![
+                        BtnArea { btn: ActionBtn::Orientation, x: 24, y: 252, w: 16, h: 16 },
+                        BtnArea { btn: ActionBtn::Resize, x: 24, y: 272, w: 16, h: 16 },
+                        BtnArea { btn: ActionBtn::Refresh, x: 24, y: 292, w: 16, h: 16 },
+                        BtnArea { btn: ActionBtn::Close, x: 24, y: 312, w: 16, h: 16 },
+                    ];
+                    (336, Some(243), btns)
+                } else {
+                    (244, None, Vec::new())
+                };
+                LayoutMetrics {
+                    win_w,
+                    win_h,
+                    grip_pos: (22, 9),
+                    claude_logo: (22, 25),
+                    claude_gauge: (32, 66),
+                    codex_logo: (22, 100),
+                    codex_gauge: (32, 141),
+                    gemini_logo: (22, 175),
+                    gemini_gauge: (32, 216),
+                    dividers: vec![92, 167],
+                    btn_divider: btn_div,
+                    buttons,
+                    logos: vec![
+                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 7, y: 22, w: 50, h: 26, tooltip_anchor: (32, 20) },
+                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 7, y: 97, w: 50, h: 26, tooltip_anchor: (32, 95) },
+                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 7, y: 172, w: 50, h: 26, tooltip_anchor: (32, 170) },
+                    ],
+                }
+            }
+        },
     }
 }
 
@@ -190,160 +283,91 @@ fn draw_widget(
     hovered_btn: Option<ActionBtn>,
     hovered_logo: Option<HoveredLogo>,
 ) {
-    let (w, h) = get_dimensions(cfg, is_hovered);
-    fb.resize(w, h);
+    let layout = compute_layout(cfg, is_hovered);
+    fb.resize(layout.win_w, layout.win_h);
     fb.clear(Color::rgb(12, 16, 23));
 
-    let btn_areas = get_button_areas(w, h, cfg.orientation);
-    let logo_areas = get_logo_areas(h, cfg.orientation);
+    let is_vert = cfg.orientation == Orientation::Vertical;
 
-    match cfg.orientation {
-        Orientation::Horizontal => {
-            // Drag handle on far left
-            fb.draw_drag_grip(7, (h as i32 - 10) / 2, false);
+    // 1. Drag grip
+    fb.draw_drag_grip(layout.grip_pos.0, layout.grip_pos.1, is_vert, cfg.scale);
 
-            // 1. Claude
-            fb.draw_claude_logo(20, (h as i32 - 10) / 2);
-            fb.draw_ring_gauge(
-                53,
-                (h as i32) / 2,
-                12.0,
-                2.5,
-                data.claude_5h,
-                Color::rgb(192, 132, 252),
-            );
+    // 2. Claude
+    fb.draw_claude_logo(layout.claude_logo.0, layout.claude_logo.1, cfg.scale);
+    fb.draw_ring_gauge(
+        layout.claude_gauge.0,
+        layout.claude_gauge.1,
+        data.claude_5h,
+        Color::rgb(192, 132, 252),
+        cfg.scale,
+    );
 
-            // Divider 1
-            fb.draw_divider_v(76);
+    // 3. Codex
+    fb.draw_codex_logo(layout.codex_logo.0, layout.codex_logo.1, cfg.scale);
+    fb.draw_ring_gauge(
+        layout.codex_gauge.0,
+        layout.codex_gauge.1,
+        data.codex_5h,
+        Color::rgb(52, 211, 153),
+        cfg.scale,
+    );
 
-            // 2. Codex
-            fb.draw_codex_logo(85, (h as i32 - 10) / 2);
-            fb.draw_ring_gauge(
-                118,
-                (h as i32) / 2,
-                12.0,
-                2.5,
-                data.codex_5h,
-                Color::rgb(52, 211, 153),
-            );
+    // 4. Gemini
+    fb.draw_gemini_logo(layout.gemini_logo.0, layout.gemini_logo.1, cfg.scale);
+    fb.draw_ring_gauge(
+        layout.gemini_gauge.0,
+        layout.gemini_gauge.1,
+        data.gemini,
+        Color::rgb(96, 165, 250),
+        cfg.scale,
+    );
 
-            // Divider 2
-            fb.draw_divider_v(141);
+    // 5. Dividers between agents
+    for &pos in &layout.dividers {
+        if is_vert {
+            fb.draw_divider_h(pos);
+        } else {
+            fb.draw_divider_v(pos);
+        }
+    }
 
-            // 3. Gemini
-            fb.draw_gemini_logo(150, (h as i32 - 10) / 2);
-            fb.draw_ring_gauge(
-                183,
-                (h as i32) / 2,
-                12.0,
-                2.5,
-                data.gemini,
-                Color::rgb(96, 165, 250),
-            );
-
-            // Action Buttons: Only rendered when hovered
-            if is_hovered {
-                fb.draw_divider_v(206);
-                for area in btn_areas {
-                    let is_target = hovered_btn == Some(area.btn);
-                    match area.btn {
-                        ActionBtn::Orientation => {
-                            fb.draw_icon_orientation(area.x, area.y + 1, is_target);
-                        }
-                        ActionBtn::Resize => {
-                            fb.draw_icon_resize(area.x, area.y + 1, is_target);
-                        }
-                        ActionBtn::Refresh => {
-                            fb.draw_icon_refresh(area.x, area.y + 1, is_target);
-                        }
-                        ActionBtn::Close => {
-                            fb.draw_icon_close(area.x + 1, area.y + 1, is_target);
-                        }
-                    }
-                }
-            }
-
-            // Draw Logo Tooltip if hovered
-            if let Some(target) = hovered_logo {
-                if let Some(area) = logo_areas.iter().find(|a| a.logo == target) {
-                    fb.draw_tooltip(area.x + area.w / 2, (h as i32) / 2 - 4, area.name);
-                }
+    // 6. Action buttons (when hovered)
+    if is_hovered {
+        if let Some(pos) = layout.btn_divider {
+            if is_vert {
+                fb.draw_divider_h(pos);
+            } else {
+                fb.draw_divider_v(pos);
             }
         }
-        Orientation::Vertical => {
-            let center_x = (w as i32) / 2;
 
-            // Drag handle at top
-            fb.draw_drag_grip((w as i32 - 10) / 2, 7, true);
-
-            // 1. Claude
-            fb.draw_claude_logo((w as i32 - 10) / 2, 22);
-            fb.draw_ring_gauge(
-                center_x,
-                48,
-                12.0,
-                2.5,
-                data.claude_5h,
-                Color::rgb(192, 132, 252),
-            );
-
-            fb.draw_divider_h(67);
-
-            // 2. Codex
-            fb.draw_codex_logo((w as i32 - 10) / 2, 75);
-            fb.draw_ring_gauge(
-                center_x,
-                101,
-                12.0,
-                2.5,
-                data.codex_5h,
-                Color::rgb(52, 211, 153),
-            );
-
-            fb.draw_divider_h(120);
-
-            // 3. Gemini
-            fb.draw_gemini_logo((w as i32 - 10) / 2, 128);
-            fb.draw_ring_gauge(
-                center_x,
-                154,
-                12.0,
-                2.5,
-                data.gemini,
-                Color::rgb(96, 165, 250),
-            );
-
-            // Action Buttons: Only rendered when hovered
-            if is_hovered {
-                fb.draw_divider_h(172);
-                for area in btn_areas {
-                    let is_target = hovered_btn == Some(area.btn);
-                    match area.btn {
-                        ActionBtn::Orientation => {
-                            fb.draw_icon_orientation(area.x, area.y + 1, is_target);
-                        }
-                        ActionBtn::Resize => {
-                            fb.draw_icon_resize(area.x, area.y + 1, is_target);
-                        }
-                        ActionBtn::Refresh => {
-                            fb.draw_icon_refresh(area.x, area.y + 1, is_target);
-                        }
-                        ActionBtn::Close => {
-                            fb.draw_icon_close(area.x + 1, area.y + 1, is_target);
-                        }
-                    }
+        for area in &layout.buttons {
+            let is_target = hovered_btn == Some(area.btn);
+            match area.btn {
+                ActionBtn::Orientation => {
+                    fb.draw_icon_orientation(area.x, area.y, is_target, cfg.scale);
                 }
-            }
-
-            // Draw Logo Tooltip if hovered
-            if let Some(target) = hovered_logo {
-                if let Some(area) = logo_areas.iter().find(|a| a.logo == target) {
-                    fb.draw_tooltip(center_x, area.y - 2, area.name);
+                ActionBtn::Resize => {
+                    fb.draw_icon_resize(area.x, area.y, is_target, cfg.scale);
+                }
+                ActionBtn::Refresh => {
+                    fb.draw_icon_refresh(area.x, area.y, is_target, cfg.scale);
+                }
+                ActionBtn::Close => {
+                    fb.draw_icon_close(area.x, area.y, is_target, cfg.scale);
                 }
             }
         }
     }
 
+    // 7. Logo Tooltip (when logo hovered)
+    if let Some(target) = hovered_logo {
+        if let Some(area) = layout.logos.iter().find(|a| a.logo == target) {
+            fb.draw_tooltip(area.tooltip_anchor.0, area.tooltip_anchor.1, area.name);
+        }
+    }
+
+    // Outer capsule border
     fb.draw_rounded_capsule_outline(Color::rgb(38, 48, 66));
 }
 
@@ -393,7 +417,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut hovered_btn: Option<ActionBtn> = None;
     let mut hovered_logo: Option<HoveredLogo> = None;
 
-    let (w, h) = get_dimensions(&cfg, is_hovered);
+    let initial_layout = compute_layout(&cfg, is_hovered);
 
     let win = conn.generate_id()?;
     let win_aux = CreateWindowAux::new()
@@ -415,8 +439,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         root,
         cfg.x as i16,
         cfg.y as i16,
-        w as u16,
-        h as u16,
+        initial_layout.win_w as u16,
+        initial_layout.win_h as u16,
         0,
         WindowClass::INPUT_OUTPUT,
         screen.root_visual,
@@ -470,7 +494,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     conn.map_window(win)?;
     conn.flush()?;
 
-    let mut fb = Framebuffer::new(w, h);
+    let mut fb = Framebuffer::new(initial_layout.win_w, initial_layout.win_h);
     let current_data = Arc::new(Mutex::new(QuotaSummary::default()));
 
     // Channel for background quota updates
@@ -544,12 +568,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 x11rb::protocol::Event::EnterNotify(_) => {
                     if !is_hovered {
                         is_hovered = true;
-                        let (new_w, new_h) = get_dimensions(&cfg, is_hovered);
+                        let layout = compute_layout(&cfg, is_hovered);
                         conn.configure_window(
                             win,
                             &ConfigureWindowAux::new()
-                                .width(new_w as u32)
-                                .height(new_h as u32),
+                                .width(layout.win_w as u32)
+                                .height(layout.win_h as u32),
                         )?;
                         conn.flush()?;
 
@@ -570,12 +594,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         is_hovered = false;
                         hovered_btn = None;
                         hovered_logo = None;
-                        let (new_w, new_h) = get_dimensions(&cfg, is_hovered);
+                        let layout = compute_layout(&cfg, is_hovered);
                         conn.configure_window(
                             win,
                             &ConfigureWindowAux::new()
-                                .width(new_w as u32)
-                                .height(new_h as u32),
+                                .width(layout.win_w as u32)
+                                .height(layout.win_h as u32),
                         )?;
                         conn.flush()?;
 
@@ -604,14 +628,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         )?;
                         conn.flush()?;
                     } else {
-                        let (curr_w, curr_h) = get_dimensions(&cfg, is_hovered);
-                        let btn_areas = get_button_areas(curr_w, curr_h, cfg.orientation);
-                        let logo_areas = get_logo_areas(curr_h, cfg.orientation);
+                        let layout = compute_layout(&cfg, is_hovered);
                         let mx = ev.event_x as i32;
                         let my = ev.event_y as i32;
 
                         let mut target_btn = None;
-                        for a in btn_areas {
+                        for a in &layout.buttons {
                             if mx >= a.x && mx < a.x + a.w && my >= a.y && my < a.y + a.h {
                                 target_btn = Some(a.btn);
                                 break;
@@ -619,7 +641,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
 
                         let mut target_logo = None;
-                        for a in logo_areas {
+                        for a in &layout.logos {
                             if mx >= a.x && mx < a.x + a.w && my >= a.y && my < a.y + a.h {
                                 target_logo = Some(a.logo);
                                 break;
@@ -636,12 +658,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             hovered_logo = target_logo;
 
                             if need_resize {
-                                let (new_w, new_h) = get_dimensions(&cfg, is_hovered);
+                                let new_layout = compute_layout(&cfg, is_hovered);
                                 conn.configure_window(
                                     win,
                                     &ConfigureWindowAux::new()
-                                        .width(new_w as u32)
-                                        .height(new_h as u32),
+                                        .width(new_layout.win_w as u32)
+                                        .height(new_layout.win_h as u32),
                                 )?;
                                 conn.flush()?;
                             }
@@ -668,12 +690,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         Orientation::Horizontal => Orientation::Vertical,
                                         Orientation::Vertical => Orientation::Horizontal,
                                     };
-                                    let (new_w, new_h) = get_dimensions(&cfg, is_hovered);
+                                    let layout = compute_layout(&cfg, is_hovered);
                                     conn.configure_window(
                                         win,
                                         &ConfigureWindowAux::new()
-                                            .width(new_w as u32)
-                                            .height(new_h as u32),
+                                            .width(layout.win_w as u32)
+                                            .height(layout.win_h as u32),
                                     )?;
                                     conn.flush()?;
                                     save_config(&cfg);
@@ -691,12 +713,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                                 ActionBtn::Resize => {
                                     cfg.scale = cfg.scale.next();
-                                    let (new_w, new_h) = get_dimensions(&cfg, is_hovered);
+                                    let layout = compute_layout(&cfg, is_hovered);
                                     conn.configure_window(
                                         win,
                                         &ConfigureWindowAux::new()
-                                            .width(new_w as u32)
-                                            .height(new_h as u32),
+                                            .width(layout.win_w as u32)
+                                            .height(layout.win_h as u32),
                                     )?;
                                     conn.flush()?;
                                     save_config(&cfg);
@@ -751,12 +773,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             Orientation::Horizontal => Orientation::Vertical,
                             Orientation::Vertical => Orientation::Horizontal,
                         };
-                        let (new_w, new_h) = get_dimensions(&cfg, is_hovered);
+                        let layout = compute_layout(&cfg, is_hovered);
                         conn.configure_window(
                             win,
                             &ConfigureWindowAux::new()
-                                .width(new_w as u32)
-                                .height(new_h as u32),
+                                .width(layout.win_w as u32)
+                                .height(layout.win_h as u32),
                         )?;
                         conn.flush()?;
                         save_config(&cfg);
