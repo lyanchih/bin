@@ -128,7 +128,7 @@ impl Framebuffer {
         }
     }
 
-    /// 3x5 text rendering for compact numbers
+    /// 3x5 text rendering for compact numbers and tooltips
     pub fn draw_text_3x5(&mut self, start_x: i32, start_y: i32, text: &str, color: Color) {
         let mut curr_x = start_x;
         for c in text.chars() {
@@ -484,35 +484,67 @@ impl Framebuffer {
     }
 
     /// Draw a small floating tooltip showing Agent Name
-    pub fn draw_tooltip(&mut self, x: i32, y: i32, text: &str) {
-        let pad_x = 4;
-        let pad_y = 2;
-        let text_w = text.len() * 6 - 1;
-        let box_w = text_w + pad_x * 2;
-        let box_h = 7 + pad_y * 2;
+    pub fn draw_tooltip(&mut self, x: i32, y: i32, text: &str, scale: ScaleSize) {
+        match scale {
+            ScaleSize::Small => {
+                let pad_x = 3;
+                let pad_y = 2;
+                let text_w = text.len() * 4 - 1;
+                let box_w = text_w + pad_x * 2;
+                let box_h = 5 + pad_y * 2;
 
-        let bx = (x - (box_w as i32) / 2).clamp(2, (self.width as i32) - (box_w as i32) - 2);
-        let by = (y - (box_h as i32)).max(2);
+                let max_x = ((self.width as i32) - (box_w as i32) - 2).max(2);
+                let bx = (x - (box_w as i32) / 2).clamp(2, max_x);
+                let max_y = ((self.height as i32) - (box_h as i32) - 2).max(2);
+                let by = (y - (box_h as i32)).clamp(2, max_y);
 
-        // Tooltip dark card background
-        self.fill_rect(bx, by, box_w as i32, box_h as i32, Color::rgb(24, 32, 47));
+                self.fill_rect(bx, by, box_w as i32, box_h as i32, Color::rgb(24, 32, 47));
+                for dx in 0..(box_w as i32) {
+                    self.set_pixel(bx + dx, by, Color::rgb(71, 85, 105));
+                    self.set_pixel(bx + dx, by + (box_h as i32) - 1, Color::rgb(71, 85, 105));
+                }
+                for dy in 0..(box_h as i32) {
+                    self.set_pixel(bx, by + dy, Color::rgb(71, 85, 105));
+                    self.set_pixel(bx + (box_w as i32) - 1, by + dy, Color::rgb(71, 85, 105));
+                }
 
-        // Border
-        for dx in 0..(box_w as i32) {
-            self.set_pixel(bx + dx, by, Color::rgb(71, 85, 105));
-            self.set_pixel(bx + dx, by + (box_h as i32) - 1, Color::rgb(71, 85, 105));
+                self.draw_text_3x5(
+                    bx + pad_x as i32,
+                    by + pad_y as i32,
+                    text,
+                    Color::rgb(241, 245, 249),
+                );
+            }
+            _ => {
+                let pad_x = 4;
+                let pad_y = 2;
+                let text_w = text.len() * 6 - 1;
+                let box_w = text_w + pad_x * 2;
+                let box_h = 7 + pad_y * 2;
+
+                let max_x = ((self.width as i32) - (box_w as i32) - 2).max(2);
+                let bx = (x - (box_w as i32) / 2).clamp(2, max_x);
+                let max_y = ((self.height as i32) - (box_h as i32) - 2).max(2);
+                let by = (y - (box_h as i32)).clamp(2, max_y);
+
+                self.fill_rect(bx, by, box_w as i32, box_h as i32, Color::rgb(24, 32, 47));
+                for dx in 0..(box_w as i32) {
+                    self.set_pixel(bx + dx, by, Color::rgb(71, 85, 105));
+                    self.set_pixel(bx + dx, by + (box_h as i32) - 1, Color::rgb(71, 85, 105));
+                }
+                for dy in 0..(box_h as i32) {
+                    self.set_pixel(bx, by + dy, Color::rgb(71, 85, 105));
+                    self.set_pixel(bx + (box_w as i32) - 1, by + dy, Color::rgb(71, 85, 105));
+                }
+
+                self.draw_text_scaled(
+                    bx + pad_x as i32,
+                    by + pad_y as i32,
+                    text,
+                    Color::rgb(241, 245, 249),
+                    1,
+                );
+            }
         }
-        for dy in 0..(box_h as i32) {
-            self.set_pixel(bx, by + dy, Color::rgb(71, 85, 105));
-            self.set_pixel(bx + (box_w as i32) - 1, by + dy, Color::rgb(71, 85, 105));
-        }
-
-        self.draw_text_scaled(
-            bx + pad_x as i32,
-            by + pad_y as i32,
-            text,
-            Color::rgb(241, 245, 249),
-            1,
-        );
     }
 }

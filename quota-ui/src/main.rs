@@ -39,6 +39,8 @@ pub struct BtnArea {
     pub y: i32,
     pub w: i32,
     pub h: i32,
+    pub icon_x: i32,
+    pub icon_y: i32,
 }
 
 #[derive(Clone)]
@@ -75,10 +77,10 @@ pub fn compute_layout(cfg: &AppConfig, is_hovered: bool) -> LayoutMetrics {
                 let win_h = 30;
                 let (win_w, btn_div, buttons) = if is_hovered {
                     let btns = vec![
-                        BtnArea { btn: ActionBtn::Orientation, x: 155, y: 11, w: 9, h: 9 },
-                        BtnArea { btn: ActionBtn::Resize, x: 166, y: 11, w: 9, h: 9 },
-                        BtnArea { btn: ActionBtn::Refresh, x: 177, y: 11, w: 9, h: 9 },
-                        BtnArea { btn: ActionBtn::Close, x: 188, y: 11, w: 9, h: 9 },
+                        BtnArea { btn: ActionBtn::Orientation, x: 153, y: 2, w: 11, h: 26, icon_x: 155, icon_y: 11 },
+                        BtnArea { btn: ActionBtn::Resize, x: 164, y: 2, w: 11, h: 26, icon_x: 166, icon_y: 11 },
+                        BtnArea { btn: ActionBtn::Refresh, x: 175, y: 2, w: 11, h: 26, icon_x: 177, icon_y: 11 },
+                        BtnArea { btn: ActionBtn::Close, x: 186, y: 2, w: 11, h: 26, icon_x: 188, icon_y: 11 },
                     ];
                     (202, Some(149), btns)
                 } else {
@@ -98,9 +100,9 @@ pub fn compute_layout(cfg: &AppConfig, is_hovered: bool) -> LayoutMetrics {
                     btn_divider: btn_div,
                     buttons,
                     logos: vec![
-                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 14, y: 3, w: 14, h: 24, tooltip_anchor: (21, 8) },
-                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 61, y: 3, w: 14, h: 24, tooltip_anchor: (68, 8) },
-                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 108, y: 3, w: 14, h: 24, tooltip_anchor: (115, 8) },
+                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 12, y: 2, w: 42, h: 26, tooltip_anchor: (21, 6) },
+                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 59, y: 2, w: 42, h: 26, tooltip_anchor: (68, 6) },
+                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 106, y: 2, w: 42, h: 26, tooltip_anchor: (115, 6) },
                     ],
                 }
             }
@@ -108,10 +110,10 @@ pub fn compute_layout(cfg: &AppConfig, is_hovered: bool) -> LayoutMetrics {
                 let win_h = 40;
                 let (win_w, btn_div, buttons) = if is_hovered {
                     let btns = vec![
-                        BtnArea { btn: ActionBtn::Orientation, x: 208, y: 15, w: 12, h: 12 },
-                        BtnArea { btn: ActionBtn::Resize, x: 222, y: 15, w: 12, h: 12 },
-                        BtnArea { btn: ActionBtn::Refresh, x: 236, y: 15, w: 12, h: 12 },
-                        BtnArea { btn: ActionBtn::Close, x: 250, y: 15, w: 12, h: 12 },
+                        BtnArea { btn: ActionBtn::Orientation, x: 206, y: 2, w: 14, h: 36, icon_x: 208, icon_y: 15 },
+                        BtnArea { btn: ActionBtn::Resize, x: 220, y: 2, w: 14, h: 36, icon_x: 222, icon_y: 15 },
+                        BtnArea { btn: ActionBtn::Refresh, x: 234, y: 2, w: 14, h: 36, icon_x: 236, icon_y: 15 },
+                        BtnArea { btn: ActionBtn::Close, x: 248, y: 2, w: 14, h: 36, icon_x: 250, icon_y: 15 },
                     ];
                     (268, Some(201), btns)
                 } else {
@@ -131,9 +133,9 @@ pub fn compute_layout(cfg: &AppConfig, is_hovered: bool) -> LayoutMetrics {
                     btn_divider: btn_div,
                     buttons,
                     logos: vec![
-                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 18, y: 4, w: 18, h: 32, tooltip_anchor: (27, 10) },
-                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 82, y: 4, w: 18, h: 32, tooltip_anchor: (91, 10) },
-                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 146, y: 4, w: 18, h: 32, tooltip_anchor: (155, 10) },
+                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 16, y: 2, w: 57, h: 36, tooltip_anchor: (27, 8) },
+                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 80, y: 2, w: 57, h: 36, tooltip_anchor: (91, 8) },
+                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 144, y: 2, w: 57, h: 36, tooltip_anchor: (155, 8) },
                     ],
                 }
             }
@@ -141,10 +143,10 @@ pub fn compute_layout(cfg: &AppConfig, is_hovered: bool) -> LayoutMetrics {
                 let win_h = 58;
                 let (win_w, btn_div, buttons) = if is_hovered {
                     let btns = vec![
-                        BtnArea { btn: ActionBtn::Orientation, x: 295, y: 22, w: 16, h: 16 },
-                        BtnArea { btn: ActionBtn::Resize, x: 315, y: 22, w: 16, h: 16 },
-                        BtnArea { btn: ActionBtn::Refresh, x: 335, y: 22, w: 16, h: 16 },
-                        BtnArea { btn: ActionBtn::Close, x: 355, y: 22, w: 16, h: 16 },
+                        BtnArea { btn: ActionBtn::Orientation, x: 293, y: 2, w: 20, h: 54, icon_x: 295, icon_y: 22 },
+                        BtnArea { btn: ActionBtn::Resize, x: 313, y: 2, w: 20, h: 54, icon_x: 315, icon_y: 22 },
+                        BtnArea { btn: ActionBtn::Refresh, x: 333, y: 2, w: 20, h: 54, icon_x: 335, icon_y: 22 },
+                        BtnArea { btn: ActionBtn::Close, x: 353, y: 2, w: 20, h: 54, icon_x: 355, icon_y: 22 },
                     ];
                     (380, Some(287), btns)
                 } else {
@@ -164,22 +166,22 @@ pub fn compute_layout(cfg: &AppConfig, is_hovered: bool) -> LayoutMetrics {
                     btn_divider: btn_div,
                     buttons,
                     logos: vec![
-                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 25, y: 6, w: 26, h: 46, tooltip_anchor: (38, 14) },
-                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 116, y: 6, w: 26, h: 46, tooltip_anchor: (129, 14) },
-                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 207, y: 6, w: 26, h: 46, tooltip_anchor: (220, 14) },
+                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 24, y: 4, w: 80, h: 50, tooltip_anchor: (38, 12) },
+                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 115, y: 4, w: 80, h: 50, tooltip_anchor: (129, 12) },
+                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 206, y: 4, w: 80, h: 50, tooltip_anchor: (220, 12) },
                     ],
                 }
             }
         },
         Orientation::Vertical => match cfg.scale {
             ScaleSize::Small => {
-                let win_w = 36;
+                let win_w = 42; // Generous 42px width for comfort
                 let (win_h, btn_div, buttons) = if is_hovered {
                     let btns = vec![
-                        BtnArea { btn: ActionBtn::Orientation, x: 14, y: 135, w: 9, h: 9 },
-                        BtnArea { btn: ActionBtn::Resize, x: 14, y: 146, w: 9, h: 9 },
-                        BtnArea { btn: ActionBtn::Refresh, x: 14, y: 157, w: 9, h: 9 },
-                        BtnArea { btn: ActionBtn::Close, x: 14, y: 168, w: 9, h: 9 },
+                        BtnArea { btn: ActionBtn::Orientation, x: 2, y: 133, w: 38, h: 11, icon_x: 17, icon_y: 135 },
+                        BtnArea { btn: ActionBtn::Resize, x: 2, y: 144, w: 38, h: 11, icon_x: 17, icon_y: 146 },
+                        BtnArea { btn: ActionBtn::Refresh, x: 2, y: 155, w: 38, h: 11, icon_x: 17, icon_y: 157 },
+                        BtnArea { btn: ActionBtn::Close, x: 2, y: 166, w: 38, h: 11, icon_x: 17, icon_y: 168 },
                     ];
                     (182, Some(129), btns)
                 } else {
@@ -188,31 +190,31 @@ pub fn compute_layout(cfg: &AppConfig, is_hovered: bool) -> LayoutMetrics {
                 LayoutMetrics {
                     win_w,
                     win_h,
-                    grip_pos: (13, 6),
-                    claude_logo: (13, 14),
-                    claude_gauge: (18, 35),
-                    codex_logo: (13, 54),
-                    codex_gauge: (18, 75),
-                    gemini_logo: (13, 94),
-                    gemini_gauge: (18, 115),
+                    grip_pos: (16, 6),
+                    claude_logo: (16, 14),
+                    claude_gauge: (21, 35),
+                    codex_logo: (16, 54),
+                    codex_gauge: (21, 75),
+                    gemini_logo: (16, 94),
+                    gemini_gauge: (21, 115),
                     dividers: vec![49, 89],
                     btn_divider: btn_div,
                     buttons,
                     logos: vec![
-                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 4, y: 12, w: 28, h: 14, tooltip_anchor: (18, 11) },
-                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 4, y: 52, w: 28, h: 14, tooltip_anchor: (18, 51) },
-                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 4, y: 92, w: 28, h: 14, tooltip_anchor: (18, 91) },
+                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 2, y: 10, w: 38, h: 38, tooltip_anchor: (21, 10) },
+                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 2, y: 50, w: 38, h: 38, tooltip_anchor: (21, 50) },
+                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 2, y: 90, w: 38, h: 38, tooltip_anchor: (21, 90) },
                     ],
                 }
             }
             ScaleSize::Normal => {
-                let win_w = 46;
+                let win_w = 48; // Generous 48px width
                 let (win_h, btn_div, buttons) = if is_hovered {
                     let btns = vec![
-                        BtnArea { btn: ActionBtn::Orientation, x: 17, y: 176, w: 12, h: 12 },
-                        BtnArea { btn: ActionBtn::Resize, x: 17, y: 190, w: 12, h: 12 },
-                        BtnArea { btn: ActionBtn::Refresh, x: 17, y: 204, w: 12, h: 12 },
-                        BtnArea { btn: ActionBtn::Close, x: 17, y: 218, w: 12, h: 12 },
+                        BtnArea { btn: ActionBtn::Orientation, x: 2, y: 174, w: 44, h: 14, icon_x: 19, icon_y: 176 },
+                        BtnArea { btn: ActionBtn::Resize, x: 2, y: 188, w: 44, h: 14, icon_x: 19, icon_y: 190 },
+                        BtnArea { btn: ActionBtn::Refresh, x: 2, y: 202, w: 44, h: 14, icon_x: 19, icon_y: 204 },
+                        BtnArea { btn: ActionBtn::Close, x: 2, y: 216, w: 44, h: 14, icon_x: 19, icon_y: 218 },
                     ];
                     (236, Some(169), btns)
                 } else {
@@ -221,31 +223,31 @@ pub fn compute_layout(cfg: &AppConfig, is_hovered: bool) -> LayoutMetrics {
                 LayoutMetrics {
                     win_w,
                     win_h,
-                    grip_pos: (18, 7),
-                    claude_logo: (16, 18),
-                    claude_gauge: (23, 46),
-                    codex_logo: (16, 70),
-                    codex_gauge: (23, 98),
-                    gemini_logo: (16, 122),
-                    gemini_gauge: (23, 150),
+                    grip_pos: (19, 7),
+                    claude_logo: (17, 18),
+                    claude_gauge: (24, 46),
+                    codex_logo: (17, 70),
+                    codex_gauge: (24, 98),
+                    gemini_logo: (17, 122),
+                    gemini_gauge: (24, 150),
                     dividers: vec![64, 116],
                     btn_divider: btn_div,
                     buttons,
                     logos: vec![
-                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 5, y: 16, w: 36, h: 17, tooltip_anchor: (23, 15) },
-                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 5, y: 68, w: 36, h: 17, tooltip_anchor: (23, 67) },
-                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 5, y: 120, w: 36, h: 17, tooltip_anchor: (23, 119) },
+                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 2, y: 12, w: 44, h: 50, tooltip_anchor: (24, 14) },
+                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 2, y: 66, w: 44, h: 48, tooltip_anchor: (24, 66) },
+                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 2, y: 118, w: 44, h: 48, tooltip_anchor: (24, 118) },
                     ],
                 }
             }
             ScaleSize::Large => {
-                let win_w = 64;
+                let win_w = 66; // Generous 66px width
                 let (win_h, btn_div, buttons) = if is_hovered {
                     let btns = vec![
-                        BtnArea { btn: ActionBtn::Orientation, x: 24, y: 252, w: 16, h: 16 },
-                        BtnArea { btn: ActionBtn::Resize, x: 24, y: 272, w: 16, h: 16 },
-                        BtnArea { btn: ActionBtn::Refresh, x: 24, y: 292, w: 16, h: 16 },
-                        BtnArea { btn: ActionBtn::Close, x: 24, y: 312, w: 16, h: 16 },
+                        BtnArea { btn: ActionBtn::Orientation, x: 2, y: 249, w: 62, h: 20, icon_x: 26, icon_y: 252 },
+                        BtnArea { btn: ActionBtn::Resize, x: 2, y: 269, w: 62, h: 20, icon_x: 26, icon_y: 272 },
+                        BtnArea { btn: ActionBtn::Refresh, x: 2, y: 289, w: 62, h: 20, icon_x: 26, icon_y: 292 },
+                        BtnArea { btn: ActionBtn::Close, x: 2, y: 309, w: 62, h: 20, icon_x: 26, icon_y: 312 },
                     ];
                     (336, Some(243), btns)
                 } else {
@@ -254,20 +256,20 @@ pub fn compute_layout(cfg: &AppConfig, is_hovered: bool) -> LayoutMetrics {
                 LayoutMetrics {
                     win_w,
                     win_h,
-                    grip_pos: (22, 9),
-                    claude_logo: (22, 25),
-                    claude_gauge: (32, 66),
-                    codex_logo: (22, 100),
-                    codex_gauge: (32, 141),
-                    gemini_logo: (22, 175),
-                    gemini_gauge: (32, 216),
+                    grip_pos: (23, 9),
+                    claude_logo: (23, 25),
+                    claude_gauge: (33, 66),
+                    codex_logo: (23, 100),
+                    codex_gauge: (33, 141),
+                    gemini_logo: (23, 175),
+                    gemini_gauge: (33, 216),
                     dividers: vec![92, 167],
                     btn_divider: btn_div,
                     buttons,
                     logos: vec![
-                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 7, y: 22, w: 50, h: 26, tooltip_anchor: (32, 20) },
-                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 7, y: 97, w: 50, h: 26, tooltip_anchor: (32, 95) },
-                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 7, y: 172, w: 50, h: 26, tooltip_anchor: (32, 170) },
+                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 2, y: 18, w: 62, h: 72, tooltip_anchor: (33, 20) },
+                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 2, y: 94, w: 62, h: 71, tooltip_anchor: (33, 95) },
+                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 2, y: 169, w: 62, h: 71, tooltip_anchor: (33, 170) },
                     ],
                 }
             }
@@ -343,18 +345,29 @@ fn draw_widget(
 
         for area in &layout.buttons {
             let is_target = hovered_btn == Some(area.btn);
+            if is_target {
+                // Soft rounded highlight pill behind hovered button
+                fb.fill_rect(
+                    area.x + 1,
+                    area.y + 1,
+                    (area.w - 2).max(1),
+                    (area.h - 2).max(1),
+                    Color::rgb(28, 38, 56),
+                );
+            }
+
             match area.btn {
                 ActionBtn::Orientation => {
-                    fb.draw_icon_orientation(area.x, area.y, is_target, cfg.scale);
+                    fb.draw_icon_orientation(area.icon_x, area.icon_y, is_target, cfg.scale);
                 }
                 ActionBtn::Resize => {
-                    fb.draw_icon_resize(area.x, area.y, is_target, cfg.scale);
+                    fb.draw_icon_resize(area.icon_x, area.icon_y, is_target, cfg.scale);
                 }
                 ActionBtn::Refresh => {
-                    fb.draw_icon_refresh(area.x, area.y, is_target, cfg.scale);
+                    fb.draw_icon_refresh(area.icon_x, area.icon_y, is_target, cfg.scale);
                 }
                 ActionBtn::Close => {
-                    fb.draw_icon_close(area.x, area.y, is_target, cfg.scale);
+                    fb.draw_icon_close(area.icon_x, area.icon_y, is_target, cfg.scale);
                 }
             }
         }
@@ -363,7 +376,7 @@ fn draw_widget(
     // 7. Logo Tooltip (when logo hovered)
     if let Some(target) = hovered_logo {
         if let Some(area) = layout.logos.iter().find(|a| a.logo == target) {
-            fb.draw_tooltip(area.tooltip_anchor.0, area.tooltip_anchor.1, area.name);
+            fb.draw_tooltip(area.tooltip_anchor.0, area.tooltip_anchor.1, area.name, cfg.scale);
         }
     }
 
@@ -416,6 +429,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut is_hovered = false;
     let mut hovered_btn: Option<ActionBtn> = None;
     let mut hovered_logo: Option<HoveredLogo> = None;
+
+    // Hover debounce / hysteresis: prevents flickering on edge crossings
+    let mut leave_deadline: Option<Instant> = None;
+    let hover_grace_period = Duration::from_millis(250);
 
     let initial_layout = compute_layout(&cfg, is_hovered);
 
@@ -550,7 +567,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             trigger_background_fetch(tx.clone());
         }
 
-        // 3. Process X11 Events
+        // 3. Check Hover Grace Period Debounce
+        if let Some(deadline) = leave_deadline {
+            if Instant::now() >= deadline {
+                leave_deadline = None;
+                if is_hovered && !is_dragging {
+                    is_hovered = false;
+                    hovered_btn = None;
+                    hovered_logo = None;
+                    let layout = compute_layout(&cfg, is_hovered);
+                    conn.configure_window(
+                        win,
+                        &ConfigureWindowAux::new()
+                            .width(layout.win_w as u32)
+                            .height(layout.win_h as u32),
+                    )?;
+                    conn.flush()?;
+
+                    let data = current_data.lock().unwrap();
+                    draw_widget(
+                        &mut fb,
+                        &data,
+                        &cfg,
+                        is_hovered,
+                        None,
+                        None,
+                    );
+                    upload_frame(&conn, win, gc, &fb)?;
+                }
+            }
+        }
+
+        // 4. Process X11 Events
         while let Some(event) = conn.poll_for_event()? {
             match event {
                 x11rb::protocol::Event::Expose(_) => {
@@ -565,7 +613,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     );
                     upload_frame(&conn, win, gc, &fb)?;
                 }
-                x11rb::protocol::Event::EnterNotify(_) => {
+                x11rb::protocol::Event::EnterNotify(ev) => {
+                    if ev.detail == NotifyDetail::INFERIOR {
+                        continue;
+                    }
+                    leave_deadline = None; // Cancel any scheduled leave collapse
                     if !is_hovered {
                         is_hovered = true;
                         let layout = compute_layout(&cfg, is_hovered);
@@ -589,19 +641,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         upload_frame(&conn, win, gc, &fb)?;
                     }
                 }
-                x11rb::protocol::Event::LeaveNotify(_) => {
+                x11rb::protocol::Event::LeaveNotify(ev) => {
+                    if ev.detail == NotifyDetail::INFERIOR {
+                        continue;
+                    }
                     if !is_dragging && is_hovered {
-                        is_hovered = false;
+                        // Immediately clear button/logo hover highlights
                         hovered_btn = None;
                         hovered_logo = None;
-                        let layout = compute_layout(&cfg, is_hovered);
-                        conn.configure_window(
-                            win,
-                            &ConfigureWindowAux::new()
-                                .width(layout.win_w as u32)
-                                .height(layout.win_h as u32),
-                        )?;
-                        conn.flush()?;
+
+                        // Start grace period before collapsing the window
+                        leave_deadline = Some(Instant::now() + hover_grace_period);
 
                         let data = current_data.lock().unwrap();
                         draw_widget(
@@ -609,8 +659,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             &data,
                             &cfg,
                             is_hovered,
-                            hovered_btn,
-                            hovered_logo,
+                            None,
+                            None,
                         );
                         upload_frame(&conn, win, gc, &fb)?;
                     }
@@ -628,6 +678,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         )?;
                         conn.flush()?;
                     } else {
+                        // Cursor is moving inside window: cancel any pending leave timer
+                        leave_deadline = None;
+
+                        let need_expand = !is_hovered;
+                        if need_expand {
+                            is_hovered = true;
+                            let new_layout = compute_layout(&cfg, is_hovered);
+                            conn.configure_window(
+                                win,
+                                &ConfigureWindowAux::new()
+                                    .width(new_layout.win_w as u32)
+                                    .height(new_layout.win_h as u32),
+                            )?;
+                            conn.flush()?;
+                        }
+
                         let layout = compute_layout(&cfg, is_hovered);
                         let mx = ev.event_x as i32;
                         let my = ev.event_y as i32;
@@ -650,23 +716,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         if target_btn != hovered_btn
                             || target_logo != hovered_logo
-                            || !is_hovered
+                            || need_expand
                         {
-                            let need_resize = !is_hovered;
-                            is_hovered = true;
                             hovered_btn = target_btn;
                             hovered_logo = target_logo;
-
-                            if need_resize {
-                                let new_layout = compute_layout(&cfg, is_hovered);
-                                conn.configure_window(
-                                    win,
-                                    &ConfigureWindowAux::new()
-                                        .width(new_layout.win_w as u32)
-                                        .height(new_layout.win_h as u32),
-                                )?;
-                                conn.flush()?;
-                            }
 
                             let data = current_data.lock().unwrap();
                             draw_widget(
