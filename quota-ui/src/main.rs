@@ -49,10 +49,15 @@ struct LogoArea {
     h: i32,
 }
 
-fn get_dimensions(cfg: &AppConfig) -> (usize, usize) {
-    let (base_w, base_h) = match cfg.orientation {
-        Orientation::Horizontal => (268, 38),
-        Orientation::Vertical => (44, 210),
+/// Dynamic dimensions:
+/// When NOT hovered: Ultra-compact, only Logo + Ring Meters (Horizontal: 208px, Vertical: 168px)
+/// When hovered: Extends to reveal control buttons (Horizontal: +58px = 266px, Vertical: +48px = 216px)
+fn get_dimensions(cfg: &AppConfig, is_hovered: bool) -> (usize, usize) {
+    let (base_w, base_h) = match (cfg.orientation, is_hovered) {
+        (Orientation::Horizontal, false) => (208, 38),
+        (Orientation::Horizontal, true) => (266, 38),
+        (Orientation::Vertical, false) => (44, 168),
+        (Orientation::Vertical, true) => (44, 216),
     };
     let multiplier = match cfg.scale {
         ScaleSize::Small => 0.88,
@@ -118,7 +123,7 @@ fn get_button_areas(w: usize, h: usize, orientation: Orientation) -> Vec<BtnArea
     areas
 }
 
-fn get_logo_areas(w: usize, h: usize, orientation: Orientation) -> Vec<LogoArea> {
+fn get_logo_areas(h: usize, orientation: Orientation) -> Vec<LogoArea> {
     match orientation {
         Orientation::Horizontal => vec![
             LogoArea {
@@ -147,30 +152,29 @@ fn get_logo_areas(w: usize, h: usize, orientation: Orientation) -> Vec<LogoArea>
             },
         ],
         Orientation::Vertical => {
-            let cx = (w as i32) / 2;
             vec![
                 LogoArea {
                     logo: HoveredLogo::Claude,
                     name: "Claude",
-                    x: cx - 10,
+                    x: 6,
                     y: 18,
-                    w: 20,
+                    w: 32,
                     h: 18,
                 },
                 LogoArea {
                     logo: HoveredLogo::Codex,
                     name: "Codex",
-                    x: cx - 10,
+                    x: 6,
                     y: 71,
-                    w: 20,
+                    w: 32,
                     h: 18,
                 },
                 LogoArea {
                     logo: HoveredLogo::Gemini,
                     name: "Gemini",
-                    x: cx - 10,
+                    x: 6,
                     y: 124,
-                    w: 20,
+                    w: 32,
                     h: 18,
                 },
             ]
@@ -186,12 +190,12 @@ fn draw_widget(
     hovered_btn: Option<ActionBtn>,
     hovered_logo: Option<HoveredLogo>,
 ) {
-    let (w, h) = get_dimensions(cfg);
+    let (w, h) = get_dimensions(cfg, is_hovered);
     fb.resize(w, h);
     fb.clear(Color::rgb(12, 16, 23));
 
     let btn_areas = get_button_areas(w, h, cfg.orientation);
-    let logo_areas = get_logo_areas(w, h, cfg.orientation);
+    let logo_areas = get_logo_areas(h, cfg.orientation);
 
     match cfg.orientation {
         Orientation::Horizontal => {
@@ -237,7 +241,7 @@ fn draw_widget(
                 Color::rgb(96, 165, 250),
             );
 
-            // Action Buttons
+            // Action Buttons: Only rendered when hovered
             if is_hovered {
                 fb.draw_divider_v(206);
                 for area in btn_areas {
@@ -309,7 +313,7 @@ fn draw_widget(
                 Color::rgb(96, 165, 250),
             );
 
-            // Action Buttons
+            // Action Buttons: Only rendered when hovered
             if is_hovered {
                 fb.draw_divider_h(172);
                 for area in btn_areas {
@@ -385,7 +389,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = screen.root;
 
     let mut cfg = load_config();
-    let (w, h) = get_dimensions(&cfg);
+    let mut is_hovered = false;
+    let mut hovered_btn: Option<ActionBtn> = None;
+    let mut hovered_logo: Option<HoveredLogo> = None;
+
+    let (w, h) = get_dimensions(&cfg, is_hovered);
 
     let win = conn.generate_id()?;
     let win_aux = CreateWindowAux::new()
@@ -476,10 +484,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut drag_start_win_x = cfg.x;
     let mut drag_start_win_y = cfg.y;
 
-    let mut is_hovered = false;
-    let mut hovered_btn: Option<ActionBtn> = None;
-    let mut hovered_logo: Option<HoveredLogo> = None;
-
     let mut last_poll = Instant::now();
     let poll_interval = Duration::from_secs(300); // 5 minutes
 
@@ -538,23 +542,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     upload_frame(&conn, win, gc, &fb)?;
                 }
                 x11rb::protocol::Event::EnterNotify(_) => {
-                    is_hovered = true;
-                    let data = current_data.lock().unwrap();
-                    draw_widget(
-                        &mut fb,
-                        &data,
-                        &cfg,
-                        is_hovered,
-                        hovered_btn,
-                        hovered_logo,
-                    );
-                    upload_frame(&conn, win, gc, &fb)?;
+                    if !is_hovered {
+                        is_hovered = true;
+                        let (new_w, new_h) = get_dimensions(&cfg, is_hovered);
+                        conn.configure_window(
+                            win,
+                            &ConfigureWindowAux::new()
+                                .width(new_w as u32)
+                                .height(new_h as u32),
+                        )?;
+                        conn.flush()?;
+
+                        let data = current_data.lock().unwrap();
+                        draw_widget(
+                            &mut fb,
+                            &data,
+                            &cfg,
+                            is_hovered,
+                            hovered_btn,
+                            hovered_logo,
+                        );
+                        upload_frame(&conn, win, gc, &fb)?;
+                    }
                 }
                 x11rb::protocol::Event::LeaveNotify(_) => {
-                    if !is_dragging {
+                    if !is_dragging && is_hovered {
                         is_hovered = false;
                         hovered_btn = None;
                         hovered_logo = None;
+                        let (new_w, new_h) = get_dimensions(&cfg, is_hovered);
+                        conn.configure_window(
+                            win,
+                            &ConfigureWindowAux::new()
+                                .width(new_w as u32)
+                                .height(new_h as u32),
+                        )?;
+                        conn.flush()?;
+
                         let data = current_data.lock().unwrap();
                         draw_widget(
                             &mut fb,
@@ -580,9 +604,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         )?;
                         conn.flush()?;
                     } else {
-                        let (curr_w, curr_h) = get_dimensions(&cfg);
+                        let (curr_w, curr_h) = get_dimensions(&cfg, is_hovered);
                         let btn_areas = get_button_areas(curr_w, curr_h, cfg.orientation);
-                        let logo_areas = get_logo_areas(curr_w, curr_h, cfg.orientation);
+                        let logo_areas = get_logo_areas(curr_h, cfg.orientation);
                         let mx = ev.event_x as i32;
                         let my = ev.event_y as i32;
 
@@ -606,9 +630,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             || target_logo != hovered_logo
                             || !is_hovered
                         {
+                            let need_resize = !is_hovered;
                             is_hovered = true;
                             hovered_btn = target_btn;
                             hovered_logo = target_logo;
+
+                            if need_resize {
+                                let (new_w, new_h) = get_dimensions(&cfg, is_hovered);
+                                conn.configure_window(
+                                    win,
+                                    &ConfigureWindowAux::new()
+                                        .width(new_w as u32)
+                                        .height(new_h as u32),
+                                )?;
+                                conn.flush()?;
+                            }
+
                             let data = current_data.lock().unwrap();
                             draw_widget(
                                 &mut fb,
@@ -631,7 +668,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         Orientation::Horizontal => Orientation::Vertical,
                                         Orientation::Vertical => Orientation::Horizontal,
                                     };
-                                    let (new_w, new_h) = get_dimensions(&cfg);
+                                    let (new_w, new_h) = get_dimensions(&cfg, is_hovered);
                                     conn.configure_window(
                                         win,
                                         &ConfigureWindowAux::new()
@@ -654,7 +691,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                                 ActionBtn::Resize => {
                                     cfg.scale = cfg.scale.next();
-                                    let (new_w, new_h) = get_dimensions(&cfg);
+                                    let (new_w, new_h) = get_dimensions(&cfg, is_hovered);
                                     conn.configure_window(
                                         win,
                                         &ConfigureWindowAux::new()
@@ -714,7 +751,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             Orientation::Horizontal => Orientation::Vertical,
                             Orientation::Vertical => Orientation::Horizontal,
                         };
-                        let (new_w, new_h) = get_dimensions(&cfg);
+                        let (new_w, new_h) = get_dimensions(&cfg, is_hovered);
                         conn.configure_window(
                             win,
                             &ConfigureWindowAux::new()
