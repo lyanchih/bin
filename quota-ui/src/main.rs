@@ -25,8 +25,24 @@ pub enum ActionBtn {
     Close,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HoveredLogo {
+    Claude,
+    Codex,
+    Gemini,
+}
+
 struct BtnArea {
     btn: ActionBtn,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+}
+
+struct LogoArea {
+    logo: HoveredLogo,
+    name: &'static str,
     x: i32,
     y: i32,
     w: i32,
@@ -53,8 +69,6 @@ fn get_button_areas(w: usize, h: usize, orientation: Orientation) -> Vec<BtnArea
     let mut areas = Vec::new();
     match orientation {
         Orientation::Horizontal => {
-            // Horizontal layout: buttons placed at top-right or right edge
-            // 4 buttons side-by-side, each 12x12 with 3px gap
             let btn_size = 10;
             let gap = 4;
             let total_w = 4 * btn_size + 3 * gap;
@@ -78,8 +92,6 @@ fn get_button_areas(w: usize, h: usize, orientation: Orientation) -> Vec<BtnArea
             }
         }
         Orientation::Vertical => {
-            // Vertical layout: buttons placed near bottom or top
-            // 4 buttons stacked vertically or 2x2 grid at top
             let btn_size = 10;
             let gap = 4;
             let total_h = 4 * btn_size + 3 * gap;
@@ -106,22 +118,83 @@ fn get_button_areas(w: usize, h: usize, orientation: Orientation) -> Vec<BtnArea
     areas
 }
 
+fn get_logo_areas(w: usize, h: usize, orientation: Orientation) -> Vec<LogoArea> {
+    match orientation {
+        Orientation::Horizontal => vec![
+            LogoArea {
+                logo: HoveredLogo::Claude,
+                name: "Claude",
+                x: 16,
+                y: 6,
+                w: 18,
+                h: (h as i32) - 12,
+            },
+            LogoArea {
+                logo: HoveredLogo::Codex,
+                name: "Codex",
+                x: 81,
+                y: 6,
+                w: 18,
+                h: (h as i32) - 12,
+            },
+            LogoArea {
+                logo: HoveredLogo::Gemini,
+                name: "Gemini",
+                x: 146,
+                y: 6,
+                w: 18,
+                h: (h as i32) - 12,
+            },
+        ],
+        Orientation::Vertical => {
+            let cx = (w as i32) / 2;
+            vec![
+                LogoArea {
+                    logo: HoveredLogo::Claude,
+                    name: "Claude",
+                    x: cx - 10,
+                    y: 18,
+                    w: 20,
+                    h: 18,
+                },
+                LogoArea {
+                    logo: HoveredLogo::Codex,
+                    name: "Codex",
+                    x: cx - 10,
+                    y: 71,
+                    w: 20,
+                    h: 18,
+                },
+                LogoArea {
+                    logo: HoveredLogo::Gemini,
+                    name: "Gemini",
+                    x: cx - 10,
+                    y: 124,
+                    w: 20,
+                    h: 18,
+                },
+            ]
+        }
+    }
+}
+
 fn draw_widget(
     fb: &mut Framebuffer,
     data: &QuotaSummary,
     cfg: &AppConfig,
     is_hovered: bool,
     hovered_btn: Option<ActionBtn>,
+    hovered_logo: Option<HoveredLogo>,
 ) {
     let (w, h) = get_dimensions(cfg);
     fb.resize(w, h);
     fb.clear(Color::rgb(12, 16, 23));
 
     let btn_areas = get_button_areas(w, h, cfg.orientation);
+    let logo_areas = get_logo_areas(w, h, cfg.orientation);
 
     match cfg.orientation {
         Orientation::Horizontal => {
-            // Horizontal layout
             // Drag handle on far left
             fb.draw_drag_grip(7, (h as i32 - 10) / 2, false);
 
@@ -164,7 +237,7 @@ fn draw_widget(
                 Color::rgb(96, 165, 250),
             );
 
-            // Action Buttons (Visible on hover or slightly dimmed)
+            // Action Buttons
             if is_hovered {
                 fb.draw_divider_v(206);
                 for area in btn_areas {
@@ -185,9 +258,15 @@ fn draw_widget(
                     }
                 }
             }
+
+            // Draw Logo Tooltip if hovered
+            if let Some(target) = hovered_logo {
+                if let Some(area) = logo_areas.iter().find(|a| a.logo == target) {
+                    fb.draw_tooltip(area.x + area.w / 2, (h as i32) / 2 - 4, area.name);
+                }
+            }
         }
         Orientation::Vertical => {
-            // Vertical layout (stacked)
             let center_x = (w as i32) / 2;
 
             // Drag handle at top
@@ -251,10 +330,16 @@ fn draw_widget(
                     }
                 }
             }
+
+            // Draw Logo Tooltip if hovered
+            if let Some(target) = hovered_logo {
+                if let Some(area) = logo_areas.iter().find(|a| a.logo == target) {
+                    fb.draw_tooltip(center_x, area.y - 2, area.name);
+                }
+            }
         }
     }
 
-    // Outer capsule outline glow
     fb.draw_rounded_capsule_outline(Color::rgb(38, 48, 66));
 }
 
@@ -393,6 +478,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut is_hovered = false;
     let mut hovered_btn: Option<ActionBtn> = None;
+    let mut hovered_logo: Option<HoveredLogo> = None;
 
     let mut last_poll = Instant::now();
     let poll_interval = Duration::from_secs(300); // 5 minutes
@@ -400,7 +486,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initial render
     {
         let data = current_data.lock().unwrap();
-        draw_widget(&mut fb, &data, &cfg, is_hovered, hovered_btn);
+        draw_widget(
+            &mut fb,
+            &data,
+            &cfg,
+            is_hovered,
+            hovered_btn,
+            hovered_logo,
+        );
     }
     upload_frame(&conn, win, gc, &fb)?;
 
@@ -410,7 +503,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             {
                 let mut data = current_data.lock().unwrap();
                 *data = fresh;
-                draw_widget(&mut fb, &data, &cfg, is_hovered, hovered_btn);
+                draw_widget(
+                    &mut fb,
+                    &data,
+                    &cfg,
+                    is_hovered,
+                    hovered_btn,
+                    hovered_logo,
+                );
             }
             upload_frame(&conn, win, gc, &fb)?;
             last_poll = Instant::now();
@@ -427,21 +527,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             match event {
                 x11rb::protocol::Event::Expose(_) => {
                     let data = current_data.lock().unwrap();
-                    draw_widget(&mut fb, &data, &cfg, is_hovered, hovered_btn);
+                    draw_widget(
+                        &mut fb,
+                        &data,
+                        &cfg,
+                        is_hovered,
+                        hovered_btn,
+                        hovered_logo,
+                    );
                     upload_frame(&conn, win, gc, &fb)?;
                 }
                 x11rb::protocol::Event::EnterNotify(_) => {
                     is_hovered = true;
                     let data = current_data.lock().unwrap();
-                    draw_widget(&mut fb, &data, &cfg, is_hovered, hovered_btn);
+                    draw_widget(
+                        &mut fb,
+                        &data,
+                        &cfg,
+                        is_hovered,
+                        hovered_btn,
+                        hovered_logo,
+                    );
                     upload_frame(&conn, win, gc, &fb)?;
                 }
                 x11rb::protocol::Event::LeaveNotify(_) => {
                     if !is_dragging {
                         is_hovered = false;
                         hovered_btn = None;
+                        hovered_logo = None;
                         let data = current_data.lock().unwrap();
-                        draw_widget(&mut fb, &data, &cfg, is_hovered, hovered_btn);
+                        draw_widget(
+                            &mut fb,
+                            &data,
+                            &cfg,
+                            is_hovered,
+                            hovered_btn,
+                            hovered_logo,
+                        );
                         upload_frame(&conn, win, gc, &fb)?;
                     }
                 }
@@ -458,36 +580,53 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         )?;
                         conn.flush()?;
                     } else {
-                        // Check if hover on action buttons
                         let (curr_w, curr_h) = get_dimensions(&cfg);
                         let btn_areas = get_button_areas(curr_w, curr_h, cfg.orientation);
+                        let logo_areas = get_logo_areas(curr_w, curr_h, cfg.orientation);
                         let mx = ev.event_x as i32;
                         let my = ev.event_y as i32;
 
-                        let mut target = None;
+                        let mut target_btn = None;
                         for a in btn_areas {
                             if mx >= a.x && mx < a.x + a.w && my >= a.y && my < a.y + a.h {
-                                target = Some(a.btn);
+                                target_btn = Some(a.btn);
                                 break;
                             }
                         }
 
-                        if target != hovered_btn || !is_hovered {
+                        let mut target_logo = None;
+                        for a in logo_areas {
+                            if mx >= a.x && mx < a.x + a.w && my >= a.y && my < a.y + a.h {
+                                target_logo = Some(a.logo);
+                                break;
+                            }
+                        }
+
+                        if target_btn != hovered_btn
+                            || target_logo != hovered_logo
+                            || !is_hovered
+                        {
                             is_hovered = true;
-                            hovered_btn = target;
+                            hovered_btn = target_btn;
+                            hovered_logo = target_logo;
                             let data = current_data.lock().unwrap();
-                            draw_widget(&mut fb, &data, &cfg, is_hovered, hovered_btn);
+                            draw_widget(
+                                &mut fb,
+                                &data,
+                                &cfg,
+                                is_hovered,
+                                hovered_btn,
+                                hovered_logo,
+                            );
                             upload_frame(&conn, win, gc, &fb)?;
                         }
                     }
                 }
                 x11rb::protocol::Event::ButtonPress(ev) => {
                     if ev.detail == 1 {
-                        // Check if clicking one of the action buttons
                         if let Some(btn) = hovered_btn {
                             match btn {
                                 ActionBtn::Orientation => {
-                                    // Toggle Horizontal <-> Vertical
                                     cfg.orientation = match cfg.orientation {
                                         Orientation::Horizontal => Orientation::Vertical,
                                         Orientation::Vertical => Orientation::Horizontal,
@@ -503,11 +642,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     save_config(&cfg);
 
                                     let data = current_data.lock().unwrap();
-                                    draw_widget(&mut fb, &data, &cfg, is_hovered, hovered_btn);
+                                    draw_widget(
+                                        &mut fb,
+                                        &data,
+                                        &cfg,
+                                        is_hovered,
+                                        hovered_btn,
+                                        hovered_logo,
+                                    );
                                     upload_frame(&conn, win, gc, &fb)?;
                                 }
                                 ActionBtn::Resize => {
-                                    // Cycle ScaleSize: Normal -> Large -> Small -> Normal
                                     cfg.scale = cfg.scale.next();
                                     let (new_w, new_h) = get_dimensions(&cfg);
                                     conn.configure_window(
@@ -520,7 +665,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     save_config(&cfg);
 
                                     let data = current_data.lock().unwrap();
-                                    draw_widget(&mut fb, &data, &cfg, is_hovered, hovered_btn);
+                                    draw_widget(
+                                        &mut fb,
+                                        &data,
+                                        &cfg,
+                                        is_hovered,
+                                        hovered_btn,
+                                        hovered_logo,
+                                    );
                                     upload_frame(&conn, win, gc, &fb)?;
                                 }
                                 ActionBtn::Refresh => {
@@ -533,7 +685,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                             }
                         } else {
-                            // Clicked blank area -> Start drag
                             is_dragging = true;
                             drag_start_cursor_x = ev.root_x as i32;
                             drag_start_cursor_y = ev.root_y as i32;
@@ -541,7 +692,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             drag_start_win_y = cfg.y;
                         }
                     } else if ev.detail == 3 {
-                        // Right click -> Quick manual refresh
                         println!("[quota-ui] Manual refresh triggered via right-click");
                         trigger_background_fetch(tx.clone());
                     }
@@ -553,15 +703,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 x11rb::protocol::Event::KeyPress(ev) => {
-                    // Esc key (keycode 9) to close
                     if ev.detail == 9 {
                         break 'main_loop;
                     }
-                    // 'r' key (keycode 27) to refresh
                     if ev.detail == 27 {
                         trigger_background_fetch(tx.clone());
                     }
-                    // 'o' key (keycode 32) to toggle orientation
                     if ev.detail == 32 {
                         cfg.orientation = match cfg.orientation {
                             Orientation::Horizontal => Orientation::Vertical,
@@ -578,7 +725,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         save_config(&cfg);
 
                         let data = current_data.lock().unwrap();
-                        draw_widget(&mut fb, &data, &cfg, is_hovered, hovered_btn);
+                        draw_widget(
+                            &mut fb,
+                            &data,
+                            &cfg,
+                            is_hovered,
+                            hovered_btn,
+                            hovered_logo,
+                        );
                         upload_frame(&conn, win, gc, &fb)?;
                     }
                 }
@@ -586,7 +740,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        thread::sleep(Duration::from_millis(16)); // ~60 FPS
+        thread::sleep(Duration::from_millis(16));
     }
 
     save_config(&cfg);

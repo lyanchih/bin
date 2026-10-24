@@ -246,7 +246,6 @@ impl Framebuffer {
 
     // --- Hover Action Buttons ---
 
-    /// Icon 1: 排列 (Orientation toggle) - 2x2 grid icon
     pub fn draw_icon_orientation(&mut self, x: i32, y: i32, is_hover: bool) {
         let c = if is_hover {
             Color::rgb(96, 165, 250)
@@ -259,42 +258,34 @@ impl Framebuffer {
         self.fill_rect(x + 5, y + 5, 3, 3, c);
     }
 
-    /// Icon 2: 縮放 (Resize/Scale toggle) - Diagonal arrows / expanding square
     pub fn draw_icon_resize(&mut self, x: i32, y: i32, is_hover: bool) {
         let c = if is_hover {
             Color::rgb(96, 165, 250)
         } else {
             Color::rgb(148, 163, 184)
         };
-        // Top-left corner
         self.fill_rect(x, y, 4, 1, c);
         self.fill_rect(x, y, 1, 4, c);
-        // Bottom-right corner
         self.fill_rect(x + 4, y + 7, 4, 1, c);
         self.fill_rect(x + 7, y + 4, 1, 4, c);
-        // Center diagonal dot
         self.set_pixel(x + 3, y + 3, c);
         self.set_pixel(x + 4, y + 4, c);
     }
 
-    /// Icon 3: 重整 (Refresh) - Circular arrow
     pub fn draw_icon_refresh(&mut self, x: i32, y: i32, is_hover: bool) {
         let c = if is_hover {
             Color::rgb(52, 211, 153)
         } else {
             Color::rgb(148, 163, 184)
         };
-        // Arc
         self.fill_rect(x + 2, y, 4, 1, c);
         self.fill_rect(x + 6, y + 1, 1, 4, c);
         self.fill_rect(x + 2, y + 6, 4, 1, c);
         self.fill_rect(x, y + 3, 1, 3, c);
-        // Arrow head
         self.fill_rect(x, y, 3, 1, c);
         self.fill_rect(x + 1, y + 1, 1, 2, c);
     }
 
-    /// Icon 4: 關閉 (Close) - '✕' cross
     pub fn draw_icon_close(&mut self, x: i32, y: i32, is_hover: bool) {
         let c = if is_hover {
             Color::rgb(244, 63, 94)
@@ -305,5 +296,38 @@ impl Framebuffer {
             self.set_pixel(x + i, y + i, c);
             self.set_pixel(x + 6 - i, y + i, c);
         }
+    }
+
+    /// Draw a small floating tooltip showing Agent Name
+    pub fn draw_tooltip(&mut self, x: i32, y: i32, text: &str) {
+        let pad_x = 4;
+        let pad_y = 2;
+        let text_w = text.len() * 6 - 1;
+        let box_w = text_w + pad_x * 2;
+        let box_h = 7 + pad_y * 2;
+
+        let bx = (x - (box_w as i32) / 2).clamp(2, (self.width as i32) - (box_w as i32) - 2);
+        let by = (y - (box_h as i32)).max(2);
+
+        // Tooltip dark card background
+        self.fill_rect(bx, by, box_w, box_h, Color::rgb(24, 32, 47));
+
+        // Subtle border
+        for dx in 0..(box_w as i32) {
+            self.set_pixel(bx + dx, by, Color::rgb(71, 85, 105));
+            self.set_pixel(bx + dx, by + (box_h as i32) - 1, Color::rgb(71, 85, 105));
+        }
+        for dy in 0..(box_h as i32) {
+            self.set_pixel(bx, by + dy, Color::rgb(71, 85, 105));
+            self.set_pixel(bx + (box_w as i32) - 1, by + dy, Color::rgb(71, 85, 105));
+        }
+
+        // Text
+        self.draw_text(
+            bx + pad_x as i32,
+            by + pad_y as i32,
+            text,
+            Color::rgb(241, 245, 249),
+        );
     }
 }
