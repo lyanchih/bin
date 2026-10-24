@@ -9,9 +9,11 @@ pub struct QuotaSummary {
     pub claude_5h: Option<f64>,
     pub codex_5h: Option<f64>,
     pub gemini: Option<f64>,
+    pub cursor: Option<f64>,
     pub error_claude: bool,
     pub error_codex: bool,
     pub error_gemini: bool,
+    pub error_cursor: bool,
 }
 
 fn home_dir() -> Result<PathBuf, String> {
@@ -109,15 +111,15 @@ fn obtain_antigravity_access_token() -> Result<String, String> {
         let client_id = doc
             .get("client_id")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| "acp_token.json 缺少 client_id".to_string())?;
+            .ok_or_else(|| "缺少 client_id".to_string())?;
         let client_secret = doc
             .get("client_secret")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| "acp_token.json 缺少 client_secret".to_string())?;
+            .ok_or_else(|| "缺少 client_secret".to_string())?;
         let refresh_token = doc
             .get("refresh_token")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| "acp_token.json 缺少 refresh_token".to_string())?;
+            .ok_or_else(|| "缺少 refresh_token".to_string())?;
         let token_uri = doc
             .get("token_uri")
             .and_then(|v| v.as_str())
@@ -137,8 +139,7 @@ fn obtain_antigravity_access_token() -> Result<String, String> {
             Some(&form_body),
             10,
         )?;
-        let tok_json =
-            json::parse(&resp_body).map_err(|e| format!("解析 OAuth token 回應失敗: {e}"))?;
+        let tok_json = json::parse(&resp_body).map_err(|e| format!("解析 token 失敗: {e}"))?;
         if let Some(tok) = tok_json.get("access_token").and_then(|v| v.as_str()) {
             if !tok.is_empty() {
                 return Ok(tok.to_string());
@@ -158,7 +159,7 @@ fn obtain_antigravity_access_token() -> Result<String, String> {
         }
     }
 
-    Err("找不到有效的 Antigravity 憑證".to_string())
+    Err("找不到 Antigravity 憑證".to_string())
 }
 
 pub fn fetch_gemini() -> Result<f64, String> {
@@ -232,6 +233,129 @@ pub fn fetch_gemini() -> Result<f64, String> {
     max_used.ok_or_else(|| "找不到 Gemini 額度資訊".to_string())
 }
 
+enum CursorAuth {
+    Bearer(String),
+    Cookie(String),
+}
+
+fn obtain_cursor_auth() -> Result<CursorAuth, String> {
+    if let Ok(tok) = env::var("CURSOR_AUTH_TOKEN").or_else(|_| env::var("CURSOR_API_KEY")) {
+        if !tok.trim().is_empty() {
+            return Ok(CursorAuth::Bearer(tok.trim().to_string()));
+        }
+    }
+    if let Ok(cookie) = env::var("CURSOR_COOKIE").or_else(|_| env::var("CURSOR_SESSION_TOKEN")) {
+        if !cookie.trim().is_empty() {
+            let val = cookie.trim();
+            let c = if val.starts_with("WorkosCursorSessionToken=") {
+                val.to_string()
+            } else {
+                format!("WorkosCursorSessionToken={val}")
+            };
+            return Ok(CursorAuth::Cookie(c));
+        }
+    }
+
+    let home = home_dir()?;
+    let candidate_files = [
+        home.join(".cursor").join("auth.json"),
+        home.join(".cursor").join("credentials.json"),
+        home.join(".config").join("cursor").join("auth.json"),
+        home.join(".config").join("Cursor").join("auth.json"),
+    ];
+
+    for path in candidate_files {
+        if path.exists() {
+            if let Ok(raw) = fs::read_to_string(&path) {
+                if let Ok(doc) = json::parse(&raw) {
+                    if let Some(t) = doc.get("accessToken").and_then(|v| v.as_str()) {
+                        if !t.is_empty() {
+                            return Ok(CursorAuth::Bearer(t.to_string()));
+                        }
+                    }
+                    if let Some(t) = doc.get("token").and_then(|v| v.as_str()) {
+                        if !t.is_empty() {
+                            return Ok(CursorAuth::Bearer(t.to_string()));
+                        }
+                    }
+                    if let Some(c) = doc.get("cookie").and_then(|v| v.as_str()) {
+                        if !c.is_empty() {
+                            let val = c.trim();
+                            let cookie = if val.starts_with("WorkosCursorSessionToken=") {
+                                val.to_string()
+                            } else {
+                                format!("WorkosCursorSessionToken={val}")
+                            };
+                            return Ok(CursorAuth::Cookie(cookie));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Err("找不到 Cursor 憑證 (~/.cursor/auth.json 或 CURSOR_AUTH_TOKEN / CURSOR_COOKIE)".to_string())
+}
+
+pub fn fetch_cursor() -> Result<f64, String> {
+    let auth = obtain_cursor_auth()?;
+    match auth {
+        CursorAuth::Bearer(token) => {
+            let auth_header = format!("Bearer {token}");
+            let body = http_request(
+                "GET",
+                "https://api2.cursor.sh/auth/usage",
+                &[
+                    ("Authorization", &auth_header),
+                    ("Accept", "application/json"),
+                    ("User-Agent", "cursor-client"),
+                ],
+                None,
+                10,
+            )?;
+            let data = json::parse(&body).map_err(|e| format!("解析 JSON 失敗: {e}"))?;
+            if let Some(gpt4) = data.get("gpt-4") {
+                let num_req = gpt4.get("numRequests").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let max_req = gpt4.get("maxRequestUsage").and_then(|v| v.as_f64());
+                if let Some(limit) = max_req {
+                    if limit > 0.0 {
+                        return Ok(((num_req / limit) * 100.0).clamp(0.0, 100.0));
+                    }
+                }
+            }
+            Ok(0.0)
+        }
+        CursorAuth::Cookie(cookie) => {
+            let body = http_request(
+                "GET",
+                "https://cursor.com/api/usage-summary",
+                &[
+                    ("Cookie", &cookie),
+                    ("Accept", "application/json"),
+                    ("User-Agent", "Mozilla/5.0"),
+                ],
+                None,
+                10,
+            )?;
+            let data = json::parse(&body).map_err(|e| format!("解析 JSON 失敗: {e}"))?;
+            if let Some(plan) = data.get("individualUsage").and_then(|u| u.get("plan")) {
+                if let Some(pct) = plan.get("totalPercentUsed").and_then(|v| v.as_f64()) {
+                    return Ok(pct.clamp(0.0, 100.0));
+                }
+                if let (Some(used), Some(limit)) = (
+                    plan.get("used").and_then(|v| v.as_f64()),
+                    plan.get("limit").and_then(|v| v.as_f64()),
+                ) {
+                    if limit > 0.0 {
+                        return Ok(((used / limit) * 100.0).clamp(0.0, 100.0));
+                    }
+                }
+            }
+            Ok(0.0)
+        }
+    }
+}
+
 pub fn fetch_all() -> QuotaSummary {
     let mut s = QuotaSummary::default();
 
@@ -256,6 +380,14 @@ pub fn fetch_all() -> QuotaSummary {
         Err(e) => {
             eprintln!("[quota-ui] Gemini fetch error: {e}");
             s.error_gemini = true;
+        }
+    }
+
+    match fetch_cursor() {
+        Ok(v) => s.cursor = Some(v),
+        Err(e) => {
+            eprintln!("[quota-ui] Cursor fetch error: {e}");
+            s.error_cursor = true;
         }
     }
 

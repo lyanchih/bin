@@ -21,15 +21,46 @@ use x11rb::wrapper::ConnectionExt as _;
 pub enum ActionBtn {
     Orientation,
     Resize,
+    Settings,
     Refresh,
     Close,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HoveredLogo {
+pub enum AgentKind {
     Claude,
     Codex,
     Gemini,
+    Cursor,
+}
+
+impl AgentKind {
+    pub fn id(&self) -> &'static str {
+        match self {
+            AgentKind::Claude => "claude",
+            AgentKind::Codex => "codex",
+            AgentKind::Gemini => "gemini",
+            AgentKind::Cursor => "cursor",
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            AgentKind::Claude => "Claude",
+            AgentKind::Codex => "Codex",
+            AgentKind::Gemini => "Gemini",
+            AgentKind::Cursor => "Cursor",
+        }
+    }
+
+    pub fn color(&self) -> Color {
+        match self {
+            AgentKind::Claude => Color::rgb(192, 132, 252),
+            AgentKind::Codex => Color::rgb(52, 211, 153),
+            AgentKind::Gemini => Color::rgb(96, 165, 250),
+            AgentKind::Cursor => Color::rgb(0, 212, 255),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -45,7 +76,7 @@ pub struct BtnArea {
 
 #[derive(Clone)]
 pub struct LogoArea {
-    pub logo: HoveredLogo,
+    pub kind: AgentKind,
     pub name: &'static str,
     pub x: i32,
     pub y: i32,
@@ -54,223 +85,476 @@ pub struct LogoArea {
     pub tooltip_anchor: (i32, i32),
 }
 
+#[derive(Clone)]
+pub struct AgentSlot {
+    pub kind: AgentKind,
+    pub logo_pos: (i32, i32),
+    pub gauge_pos: (i32, i32),
+    pub hover_area: LogoArea,
+}
+
 pub struct LayoutMetrics {
     pub win_w: usize,
     pub win_h: usize,
     pub grip_pos: (i32, i32),
-    pub claude_logo: (i32, i32),
-    pub claude_gauge: (i32, i32),
-    pub codex_logo: (i32, i32),
-    pub codex_gauge: (i32, i32),
-    pub gemini_logo: (i32, i32),
-    pub gemini_gauge: (i32, i32),
+    pub agent_slots: Vec<AgentSlot>,
     pub dividers: Vec<i32>,
     pub btn_divider: Option<i32>,
     pub buttons: Vec<BtnArea>,
-    pub logos: Vec<LogoArea>,
+}
+
+pub fn get_active_kinds(cfg: &AppConfig) -> Vec<AgentKind> {
+    let all = [
+        AgentKind::Claude,
+        AgentKind::Codex,
+        AgentKind::Gemini,
+        AgentKind::Cursor,
+    ];
+    let mut res = Vec::new();
+    for &k in &all {
+        if cfg.enabled_agents.contains(&k.id().to_string()) {
+            res.push(k);
+        }
+    }
+    if res.is_empty() {
+        all.to_vec()
+    } else {
+        res
+    }
 }
 
 pub fn compute_layout(cfg: &AppConfig, is_hovered: bool) -> LayoutMetrics {
+    let active_kinds = get_active_kinds(cfg);
+    let k_count = active_kinds.len();
+
     match cfg.orientation {
         Orientation::Horizontal => match cfg.scale {
             ScaleSize::Small => {
                 let win_h = 30;
+                let item_w = 47;
+                let start_base_x = 12;
+
+                let mut slots = Vec::new();
+                let mut dividers = Vec::new();
+
+                for (i, &kind) in active_kinds.iter().enumerate() {
+                    let sx = start_base_x + (i as i32) * item_w;
+                    slots.push(AgentSlot {
+                        kind,
+                        logo_pos: (sx + 4, 10),
+                        gauge_pos: (sx + 28, 15),
+                        hover_area: LogoArea {
+                            kind,
+                            name: kind.name(),
+                            x: sx,
+                            y: 2,
+                            w: item_w - 1,
+                            h: 26,
+                            tooltip_anchor: (sx + 9, 6),
+                        },
+                    });
+                    if i < k_count - 1 {
+                        dividers.push(sx + item_w);
+                    }
+                }
+
+                let compact_w = (start_base_x + (k_count as i32) * item_w + 4) as usize;
                 let (win_w, btn_div, buttons) = if is_hovered {
-                    let btns = vec![
-                        BtnArea { btn: ActionBtn::Orientation, x: 153, y: 2, w: 11, h: 26, icon_x: 155, icon_y: 11 },
-                        BtnArea { btn: ActionBtn::Resize, x: 164, y: 2, w: 11, h: 26, icon_x: 166, icon_y: 11 },
-                        BtnArea { btn: ActionBtn::Refresh, x: 175, y: 2, w: 11, h: 26, icon_x: 177, icon_y: 11 },
-                        BtnArea { btn: ActionBtn::Close, x: 186, y: 2, w: 11, h: 26, icon_x: 188, icon_y: 11 },
+                    let mut btns = Vec::new();
+                    let btn_actions = [
+                        ActionBtn::Orientation,
+                        ActionBtn::Resize,
+                        ActionBtn::Settings,
+                        ActionBtn::Refresh,
+                        ActionBtn::Close,
                     ];
-                    (202, Some(149), btns)
+                    let bx_start = (compact_w as i32) + 3;
+                    for (b, &action) in btn_actions.iter().enumerate() {
+                        let bx = bx_start + (b as i32) * 11;
+                        btns.push(BtnArea {
+                            btn: action,
+                            x: bx,
+                            y: 2,
+                            w: 11,
+                            h: 26,
+                            icon_x: bx + 2,
+                            icon_y: 11,
+                        });
+                    }
+                    (
+                        (bx_start + (btn_actions.len() as i32) * 11 + 6) as usize,
+                        Some((compact_w as i32) - 2),
+                        btns,
+                    )
                 } else {
-                    (150, None, Vec::new())
+                    (compact_w, None, Vec::new())
                 };
+
                 LayoutMetrics {
                     win_w,
                     win_h,
                     grip_pos: (6, 10),
-                    claude_logo: (16, 10),
-                    claude_gauge: (40, 15),
-                    codex_logo: (63, 10),
-                    codex_gauge: (87, 15),
-                    gemini_logo: (110, 10),
-                    gemini_gauge: (134, 15),
-                    dividers: vec![55, 102],
+                    agent_slots: slots,
+                    dividers,
                     btn_divider: btn_div,
                     buttons,
-                    logos: vec![
-                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 12, y: 2, w: 42, h: 26, tooltip_anchor: (21, 6) },
-                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 59, y: 2, w: 42, h: 26, tooltip_anchor: (68, 6) },
-                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 106, y: 2, w: 42, h: 26, tooltip_anchor: (115, 6) },
-                    ],
                 }
             }
             ScaleSize::Normal => {
                 let win_h = 40;
+                let item_w = 64;
+                let start_base_x = 16;
+
+                let mut slots = Vec::new();
+                let mut dividers = Vec::new();
+
+                for (i, &kind) in active_kinds.iter().enumerate() {
+                    let sx = start_base_x + (i as i32) * item_w;
+                    slots.push(AgentSlot {
+                        kind,
+                        logo_pos: (sx + 4, 13),
+                        gauge_pos: (sx + 37, 20),
+                        hover_area: LogoArea {
+                            kind,
+                            name: kind.name(),
+                            x: sx,
+                            y: 2,
+                            w: item_w - 1,
+                            h: 36,
+                            tooltip_anchor: (sx + 11, 8),
+                        },
+                    });
+                    if i < k_count - 1 {
+                        dividers.push(sx + item_w);
+                    }
+                }
+
+                let compact_w = (start_base_x + (k_count as i32) * item_w + 6) as usize;
                 let (win_w, btn_div, buttons) = if is_hovered {
-                    let btns = vec![
-                        BtnArea { btn: ActionBtn::Orientation, x: 206, y: 2, w: 14, h: 36, icon_x: 208, icon_y: 15 },
-                        BtnArea { btn: ActionBtn::Resize, x: 220, y: 2, w: 14, h: 36, icon_x: 222, icon_y: 15 },
-                        BtnArea { btn: ActionBtn::Refresh, x: 234, y: 2, w: 14, h: 36, icon_x: 236, icon_y: 15 },
-                        BtnArea { btn: ActionBtn::Close, x: 248, y: 2, w: 14, h: 36, icon_x: 250, icon_y: 15 },
+                    let mut btns = Vec::new();
+                    let btn_actions = [
+                        ActionBtn::Orientation,
+                        ActionBtn::Resize,
+                        ActionBtn::Settings,
+                        ActionBtn::Refresh,
+                        ActionBtn::Close,
                     ];
-                    (268, Some(201), btns)
+                    let bx_start = (compact_w as i32) + 4;
+                    for (b, &action) in btn_actions.iter().enumerate() {
+                        let bx = bx_start + (b as i32) * 14;
+                        btns.push(BtnArea {
+                            btn: action,
+                            x: bx,
+                            y: 2,
+                            w: 14,
+                            h: 36,
+                            icon_x: bx + 2,
+                            icon_y: 15,
+                        });
+                    }
+                    (
+                        (bx_start + (btn_actions.len() as i32) * 14 + 7) as usize,
+                        Some((compact_w as i32) - 2),
+                        btns,
+                    )
                 } else {
-                    (202, None, Vec::new())
+                    (compact_w, None, Vec::new())
                 };
+
                 LayoutMetrics {
                     win_w,
                     win_h,
                     grip_pos: (7, 15),
-                    claude_logo: (20, 13),
-                    claude_gauge: (53, 20),
-                    codex_logo: (84, 13),
-                    codex_gauge: (117, 20),
-                    gemini_logo: (148, 13),
-                    gemini_gauge: (181, 20),
-                    dividers: vec![75, 139],
+                    agent_slots: slots,
+                    dividers,
                     btn_divider: btn_div,
                     buttons,
-                    logos: vec![
-                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 16, y: 2, w: 57, h: 36, tooltip_anchor: (27, 8) },
-                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 80, y: 2, w: 57, h: 36, tooltip_anchor: (91, 8) },
-                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 144, y: 2, w: 57, h: 36, tooltip_anchor: (155, 8) },
-                    ],
                 }
             }
             ScaleSize::Large => {
                 let win_h = 58;
+                let item_w = 90;
+                let start_base_x = 24;
+
+                let mut slots = Vec::new();
+                let mut dividers = Vec::new();
+
+                for (i, &kind) in active_kinds.iter().enumerate() {
+                    let sx = start_base_x + (i as i32) * item_w;
+                    slots.push(AgentSlot {
+                        kind,
+                        logo_pos: (sx + 4, 19),
+                        gauge_pos: (sx + 52, 29),
+                        hover_area: LogoArea {
+                            kind,
+                            name: kind.name(),
+                            x: sx,
+                            y: 4,
+                            w: item_w - 1,
+                            h: 50,
+                            tooltip_anchor: (sx + 14, 12),
+                        },
+                    });
+                    if i < k_count - 1 {
+                        dividers.push(sx + item_w);
+                    }
+                }
+
+                let compact_w = (start_base_x + (k_count as i32) * item_w + 8) as usize;
                 let (win_w, btn_div, buttons) = if is_hovered {
-                    let btns = vec![
-                        BtnArea { btn: ActionBtn::Orientation, x: 293, y: 2, w: 20, h: 54, icon_x: 295, icon_y: 22 },
-                        BtnArea { btn: ActionBtn::Resize, x: 313, y: 2, w: 20, h: 54, icon_x: 315, icon_y: 22 },
-                        BtnArea { btn: ActionBtn::Refresh, x: 333, y: 2, w: 20, h: 54, icon_x: 335, icon_y: 22 },
-                        BtnArea { btn: ActionBtn::Close, x: 353, y: 2, w: 20, h: 54, icon_x: 355, icon_y: 22 },
+                    let mut btns = Vec::new();
+                    let btn_actions = [
+                        ActionBtn::Orientation,
+                        ActionBtn::Resize,
+                        ActionBtn::Settings,
+                        ActionBtn::Refresh,
+                        ActionBtn::Close,
                     ];
-                    (380, Some(287), btns)
+                    let bx_start = (compact_w as i32) + 5;
+                    for (b, &action) in btn_actions.iter().enumerate() {
+                        let bx = bx_start + (b as i32) * 20;
+                        btns.push(BtnArea {
+                            btn: action,
+                            x: bx,
+                            y: 2,
+                            w: 20,
+                            h: 54,
+                            icon_x: bx + 3,
+                            icon_y: 22,
+                        });
+                    }
+                    (
+                        (bx_start + (btn_actions.len() as i32) * 20 + 9) as usize,
+                        Some((compact_w as i32) - 2),
+                        btns,
+                    )
                 } else {
-                    (288, None, Vec::new())
+                    (compact_w, None, Vec::new())
                 };
+
                 LayoutMetrics {
                     win_w,
                     win_h,
                     grip_pos: (9, 19),
-                    claude_logo: (28, 19),
-                    claude_gauge: (76, 29),
-                    codex_logo: (119, 19),
-                    codex_gauge: (167, 29),
-                    gemini_logo: (210, 19),
-                    gemini_gauge: (258, 29),
-                    dividers: vec![107, 198],
+                    agent_slots: slots,
+                    dividers,
                     btn_divider: btn_div,
                     buttons,
-                    logos: vec![
-                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 24, y: 4, w: 80, h: 50, tooltip_anchor: (38, 12) },
-                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 115, y: 4, w: 80, h: 50, tooltip_anchor: (129, 12) },
-                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 206, y: 4, w: 80, h: 50, tooltip_anchor: (220, 12) },
-                    ],
                 }
             }
         },
         Orientation::Vertical => match cfg.scale {
             ScaleSize::Small => {
-                let win_w = 42; // Generous 42px width for comfort
+                let win_w = 42;
+                let item_h = 40;
+                let start_base_y = 10;
+
+                let mut slots = Vec::new();
+                let mut dividers = Vec::new();
+
+                for (i, &kind) in active_kinds.iter().enumerate() {
+                    let sy = start_base_y + (i as i32) * item_h;
+                    slots.push(AgentSlot {
+                        kind,
+                        logo_pos: (16, sy + 4),
+                        gauge_pos: (21, sy + 25),
+                        hover_area: LogoArea {
+                            kind,
+                            name: kind.name(),
+                            x: 2,
+                            y: sy,
+                            w: 38,
+                            h: item_h - 1,
+                            tooltip_anchor: (21, sy),
+                        },
+                    });
+                    if i < k_count - 1 {
+                        dividers.push(sy + item_h);
+                    }
+                }
+
+                let compact_h = (start_base_y + (k_count as i32) * item_h + 4) as usize;
                 let (win_h, btn_div, buttons) = if is_hovered {
-                    let btns = vec![
-                        BtnArea { btn: ActionBtn::Orientation, x: 2, y: 133, w: 38, h: 11, icon_x: 17, icon_y: 135 },
-                        BtnArea { btn: ActionBtn::Resize, x: 2, y: 144, w: 38, h: 11, icon_x: 17, icon_y: 146 },
-                        BtnArea { btn: ActionBtn::Refresh, x: 2, y: 155, w: 38, h: 11, icon_x: 17, icon_y: 157 },
-                        BtnArea { btn: ActionBtn::Close, x: 2, y: 166, w: 38, h: 11, icon_x: 17, icon_y: 168 },
+                    let mut btns = Vec::new();
+                    let btn_actions = [
+                        ActionBtn::Orientation,
+                        ActionBtn::Resize,
+                        ActionBtn::Settings,
+                        ActionBtn::Refresh,
+                        ActionBtn::Close,
                     ];
-                    (182, Some(129), btns)
+                    let by_start = (compact_h as i32) + 3;
+                    for (b, &action) in btn_actions.iter().enumerate() {
+                        let by = by_start + (b as i32) * 11;
+                        btns.push(BtnArea {
+                            btn: action,
+                            x: 2,
+                            y: by,
+                            w: 38,
+                            h: 11,
+                            icon_x: 17,
+                            icon_y: by + 2,
+                        });
+                    }
+                    (
+                        (by_start + (btn_actions.len() as i32) * 11 + 6) as usize,
+                        Some((compact_h as i32) - 2),
+                        btns,
+                    )
                 } else {
-                    (130, None, Vec::new())
+                    (compact_h, None, Vec::new())
                 };
+
                 LayoutMetrics {
                     win_w,
                     win_h,
                     grip_pos: (16, 6),
-                    claude_logo: (16, 14),
-                    claude_gauge: (21, 35),
-                    codex_logo: (16, 54),
-                    codex_gauge: (21, 75),
-                    gemini_logo: (16, 94),
-                    gemini_gauge: (21, 115),
-                    dividers: vec![49, 89],
+                    agent_slots: slots,
+                    dividers,
                     btn_divider: btn_div,
                     buttons,
-                    logos: vec![
-                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 2, y: 10, w: 38, h: 38, tooltip_anchor: (21, 10) },
-                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 2, y: 50, w: 38, h: 38, tooltip_anchor: (21, 50) },
-                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 2, y: 90, w: 38, h: 38, tooltip_anchor: (21, 90) },
-                    ],
                 }
             }
             ScaleSize::Normal => {
-                let win_w = 48; // Generous 48px width
+                let win_w = 48;
+                let item_h = 52;
+                let start_base_y = 12;
+
+                let mut slots = Vec::new();
+                let mut dividers = Vec::new();
+
+                for (i, &kind) in active_kinds.iter().enumerate() {
+                    let sy = start_base_y + (i as i32) * item_h;
+                    slots.push(AgentSlot {
+                        kind,
+                        logo_pos: (17, sy + 6),
+                        gauge_pos: (24, sy + 34),
+                        hover_area: LogoArea {
+                            kind,
+                            name: kind.name(),
+                            x: 2,
+                            y: sy,
+                            w: 44,
+                            h: item_h - 1,
+                            tooltip_anchor: (24, sy + 2),
+                        },
+                    });
+                    if i < k_count - 1 {
+                        dividers.push(sy + item_h);
+                    }
+                }
+
+                let compact_h = (start_base_y + (k_count as i32) * item_h + 6) as usize;
                 let (win_h, btn_div, buttons) = if is_hovered {
-                    let btns = vec![
-                        BtnArea { btn: ActionBtn::Orientation, x: 2, y: 174, w: 44, h: 14, icon_x: 19, icon_y: 176 },
-                        BtnArea { btn: ActionBtn::Resize, x: 2, y: 188, w: 44, h: 14, icon_x: 19, icon_y: 190 },
-                        BtnArea { btn: ActionBtn::Refresh, x: 2, y: 202, w: 44, h: 14, icon_x: 19, icon_y: 204 },
-                        BtnArea { btn: ActionBtn::Close, x: 2, y: 216, w: 44, h: 14, icon_x: 19, icon_y: 218 },
+                    let mut btns = Vec::new();
+                    let btn_actions = [
+                        ActionBtn::Orientation,
+                        ActionBtn::Resize,
+                        ActionBtn::Settings,
+                        ActionBtn::Refresh,
+                        ActionBtn::Close,
                     ];
-                    (236, Some(169), btns)
+                    let by_start = (compact_h as i32) + 4;
+                    for (b, &action) in btn_actions.iter().enumerate() {
+                        let by = by_start + (b as i32) * 14;
+                        btns.push(BtnArea {
+                            btn: action,
+                            x: 2,
+                            y: by,
+                            w: 44,
+                            h: 14,
+                            icon_x: 19,
+                            icon_y: by + 2,
+                        });
+                    }
+                    (
+                        (by_start + (btn_actions.len() as i32) * 14 + 7) as usize,
+                        Some((compact_h as i32) - 2),
+                        btns,
+                    )
                 } else {
-                    (170, None, Vec::new())
+                    (compact_h, None, Vec::new())
                 };
+
                 LayoutMetrics {
                     win_w,
                     win_h,
                     grip_pos: (19, 7),
-                    claude_logo: (17, 18),
-                    claude_gauge: (24, 46),
-                    codex_logo: (17, 70),
-                    codex_gauge: (24, 98),
-                    gemini_logo: (17, 122),
-                    gemini_gauge: (24, 150),
-                    dividers: vec![64, 116],
+                    agent_slots: slots,
+                    dividers,
                     btn_divider: btn_div,
                     buttons,
-                    logos: vec![
-                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 2, y: 12, w: 44, h: 50, tooltip_anchor: (24, 14) },
-                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 2, y: 66, w: 44, h: 48, tooltip_anchor: (24, 66) },
-                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 2, y: 118, w: 44, h: 48, tooltip_anchor: (24, 118) },
-                    ],
                 }
             }
             ScaleSize::Large => {
-                let win_w = 66; // Generous 66px width
+                let win_w = 66;
+                let item_h = 75;
+                let start_base_y = 18;
+
+                let mut slots = Vec::new();
+                let mut dividers = Vec::new();
+
+                for (i, &kind) in active_kinds.iter().enumerate() {
+                    let sy = start_base_y + (i as i32) * item_h;
+                    slots.push(AgentSlot {
+                        kind,
+                        logo_pos: (23, sy + 7),
+                        gauge_pos: (33, sy + 48),
+                        hover_area: LogoArea {
+                            kind,
+                            name: kind.name(),
+                            x: 2,
+                            y: sy,
+                            w: 62,
+                            h: item_h - 1,
+                            tooltip_anchor: (33, sy + 2),
+                        },
+                    });
+                    if i < k_count - 1 {
+                        dividers.push(sy + item_h);
+                    }
+                }
+
+                let compact_h = (start_base_y + (k_count as i32) * item_h + 8) as usize;
                 let (win_h, btn_div, buttons) = if is_hovered {
-                    let btns = vec![
-                        BtnArea { btn: ActionBtn::Orientation, x: 2, y: 249, w: 62, h: 20, icon_x: 26, icon_y: 252 },
-                        BtnArea { btn: ActionBtn::Resize, x: 2, y: 269, w: 62, h: 20, icon_x: 26, icon_y: 272 },
-                        BtnArea { btn: ActionBtn::Refresh, x: 2, y: 289, w: 62, h: 20, icon_x: 26, icon_y: 292 },
-                        BtnArea { btn: ActionBtn::Close, x: 2, y: 309, w: 62, h: 20, icon_x: 26, icon_y: 312 },
+                    let mut btns = Vec::new();
+                    let btn_actions = [
+                        ActionBtn::Orientation,
+                        ActionBtn::Resize,
+                        ActionBtn::Settings,
+                        ActionBtn::Refresh,
+                        ActionBtn::Close,
                     ];
-                    (336, Some(243), btns)
+                    let by_start = (compact_h as i32) + 5;
+                    for (b, &action) in btn_actions.iter().enumerate() {
+                        let by = by_start + (b as i32) * 20;
+                        btns.push(BtnArea {
+                            btn: action,
+                            x: 2,
+                            y: by,
+                            w: 62,
+                            h: 20,
+                            icon_x: 26,
+                            icon_y: by + 3,
+                        });
+                    }
+                    (
+                        (by_start + (btn_actions.len() as i32) * 20 + 9) as usize,
+                        Some((compact_h as i32) - 2),
+                        btns,
+                    )
                 } else {
-                    (244, None, Vec::new())
+                    (compact_h, None, Vec::new())
                 };
+
                 LayoutMetrics {
                     win_w,
                     win_h,
                     grip_pos: (23, 9),
-                    claude_logo: (23, 25),
-                    claude_gauge: (33, 66),
-                    codex_logo: (23, 100),
-                    codex_gauge: (33, 141),
-                    gemini_logo: (23, 175),
-                    gemini_gauge: (33, 216),
-                    dividers: vec![92, 167],
+                    agent_slots: slots,
+                    dividers,
                     btn_divider: btn_div,
                     buttons,
-                    logos: vec![
-                        LogoArea { logo: HoveredLogo::Claude, name: "Claude", x: 2, y: 18, w: 62, h: 72, tooltip_anchor: (33, 20) },
-                        LogoArea { logo: HoveredLogo::Codex, name: "Codex", x: 2, y: 94, w: 62, h: 71, tooltip_anchor: (33, 95) },
-                        LogoArea { logo: HoveredLogo::Gemini, name: "Gemini", x: 2, y: 169, w: 62, h: 71, tooltip_anchor: (33, 170) },
-                    ],
                 }
             }
         },
@@ -283,7 +567,7 @@ fn draw_widget(
     cfg: &AppConfig,
     is_hovered: bool,
     hovered_btn: Option<ActionBtn>,
-    hovered_logo: Option<HoveredLogo>,
+    hovered_logo: Option<AgentKind>,
 ) {
     let layout = compute_layout(cfg, is_hovered);
     fb.resize(layout.win_w, layout.win_h);
@@ -294,37 +578,32 @@ fn draw_widget(
     // 1. Drag grip
     fb.draw_drag_grip(layout.grip_pos.0, layout.grip_pos.1, is_vert, cfg.scale);
 
-    // 2. Claude
-    fb.draw_claude_logo(layout.claude_logo.0, layout.claude_logo.1, cfg.scale);
-    fb.draw_ring_gauge(
-        layout.claude_gauge.0,
-        layout.claude_gauge.1,
-        data.claude_5h,
-        Color::rgb(192, 132, 252),
-        cfg.scale,
-    );
+    // 2. Active Agent Slots
+    for slot in &layout.agent_slots {
+        let pct = match slot.kind {
+            AgentKind::Claude => data.claude_5h,
+            AgentKind::Codex => data.codex_5h,
+            AgentKind::Gemini => data.gemini,
+            AgentKind::Cursor => data.cursor,
+        };
 
-    // 3. Codex
-    fb.draw_codex_logo(layout.codex_logo.0, layout.codex_logo.1, cfg.scale);
-    fb.draw_ring_gauge(
-        layout.codex_gauge.0,
-        layout.codex_gauge.1,
-        data.codex_5h,
-        Color::rgb(52, 211, 153),
-        cfg.scale,
-    );
+        match slot.kind {
+            AgentKind::Claude => fb.draw_claude_logo(slot.logo_pos.0, slot.logo_pos.1, cfg.scale),
+            AgentKind::Codex => fb.draw_codex_logo(slot.logo_pos.0, slot.logo_pos.1, cfg.scale),
+            AgentKind::Gemini => fb.draw_gemini_logo(slot.logo_pos.0, slot.logo_pos.1, cfg.scale),
+            AgentKind::Cursor => fb.draw_cursor_logo(slot.logo_pos.0, slot.logo_pos.1, cfg.scale),
+        }
 
-    // 4. Gemini
-    fb.draw_gemini_logo(layout.gemini_logo.0, layout.gemini_logo.1, cfg.scale);
-    fb.draw_ring_gauge(
-        layout.gemini_gauge.0,
-        layout.gemini_gauge.1,
-        data.gemini,
-        Color::rgb(96, 165, 250),
-        cfg.scale,
-    );
+        fb.draw_ring_gauge(
+            slot.gauge_pos.0,
+            slot.gauge_pos.1,
+            pct,
+            slot.kind.color(),
+            cfg.scale,
+        );
+    }
 
-    // 5. Dividers between agents
+    // 3. Dividers between agents
     for &pos in &layout.dividers {
         if is_vert {
             fb.draw_divider_h(pos);
@@ -333,7 +612,7 @@ fn draw_widget(
         }
     }
 
-    // 6. Action buttons (when hovered)
+    // 4. Action buttons (when hovered)
     if is_hovered {
         if let Some(pos) = layout.btn_divider {
             if is_vert {
@@ -346,7 +625,6 @@ fn draw_widget(
         for area in &layout.buttons {
             let is_target = hovered_btn == Some(area.btn);
             if is_target {
-                // Soft rounded highlight pill behind hovered button
                 fb.fill_rect(
                     area.x + 1,
                     area.y + 1,
@@ -363,6 +641,9 @@ fn draw_widget(
                 ActionBtn::Resize => {
                     fb.draw_icon_resize(area.icon_x, area.icon_y, is_target, cfg.scale);
                 }
+                ActionBtn::Settings => {
+                    fb.draw_icon_settings(area.icon_x, area.icon_y, is_target, cfg.scale);
+                }
                 ActionBtn::Refresh => {
                     fb.draw_icon_refresh(area.icon_x, area.icon_y, is_target, cfg.scale);
                 }
@@ -373,15 +654,84 @@ fn draw_widget(
         }
     }
 
-    // 7. Logo Tooltip (when logo hovered)
+    // 5. Logo Tooltip (when logo hovered)
     if let Some(target) = hovered_logo {
-        if let Some(area) = layout.logos.iter().find(|a| a.logo == target) {
-            fb.draw_tooltip(area.tooltip_anchor.0, area.tooltip_anchor.1, area.name, cfg.scale);
+        if let Some(slot) = layout.agent_slots.iter().find(|s| s.kind == target) {
+            fb.draw_tooltip(
+                slot.hover_area.tooltip_anchor.0,
+                slot.hover_area.tooltip_anchor.1,
+                slot.kind.name(),
+                cfg.scale,
+            );
         }
     }
 
     // Outer capsule border
     fb.draw_rounded_capsule_outline(Color::rgb(38, 48, 66));
+}
+
+fn draw_settings_window(
+    fb: &mut Framebuffer,
+    cfg: &AppConfig,
+    hovered_row: Option<usize>,
+    hovered_close: bool,
+) {
+    fb.resize(180, 180);
+    fb.clear(Color::rgb(14, 18, 27));
+
+    // Title
+    fb.draw_text_scaled(12, 10, "ACTIVE AGENTS", Color::rgb(226, 232, 240), 1);
+
+    // Close button (X)
+    let close_color = if hovered_close {
+        Color::rgb(244, 63, 94)
+    } else {
+        Color::rgb(148, 163, 184)
+    };
+    for i in 0..7 {
+        fb.set_pixel(160 + i, 10 + i, close_color);
+        fb.set_pixel(160 + 6 - i, 10 + i, close_color);
+    }
+
+    // Divider below title
+    for x in 8..172 {
+        fb.set_pixel(x, 24, Color::rgb(35, 45, 62));
+    }
+
+    // 4 Checkbox rows
+    let all_kinds = [
+        AgentKind::Claude,
+        AgentKind::Codex,
+        AgentKind::Gemini,
+        AgentKind::Cursor,
+    ];
+
+    for (i, &kind) in all_kinds.iter().enumerate() {
+        let row_y = 30 + (i as i32) * 28;
+        let is_hover = hovered_row == Some(i);
+        let checked = cfg.enabled_agents.contains(&kind.id().to_string());
+        fb.draw_checkbox_row(
+            4,
+            row_y,
+            172,
+            26,
+            checked,
+            is_hover,
+            kind.name(),
+            kind.color(),
+        );
+    }
+
+    // Divider above footer
+    for x in 8..172 {
+        fb.set_pixel(x, 148, Color::rgb(35, 45, 62));
+    }
+
+    // Footer note
+    fb.draw_text_3x5(12, 156, "CLICK TO TOGGLE | SAVED", Color::rgb(100, 116, 139));
+
+    // Card border
+    fb.draw_rounded_capsule_outline(Color::rgb(51, 65, 85));
 }
 
 fn upload_frame(
@@ -428,7 +778,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut cfg = load_config();
     let mut is_hovered = false;
     let mut hovered_btn: Option<ActionBtn> = None;
-    let mut hovered_logo: Option<HoveredLogo> = None;
+    let mut hovered_logo: Option<AgentKind> = None;
 
     // Hover debounce / hysteresis: prevents flickering on edge crossings
     let mut leave_deadline: Option<Instant> = None;
@@ -436,6 +786,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let initial_layout = compute_layout(&cfg, is_hovered);
 
+    // 1. Main HUD Window
     let win = conn.generate_id()?;
     let win_aux = CreateWindowAux::new()
         .background_pixel(Color::rgb(12, 16, 23).to_x11_pixel())
@@ -488,7 +839,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &[net_wm_state_above],
     )?;
 
-    // Set _NET_WM_WINDOW_TYPE to UTILITY
     let net_wm_window_type = conn
         .intern_atom(false, b"_NET_WM_WINDOW_TYPE")?
         .reply()?
@@ -509,6 +859,57 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     conn.create_gc(gc, win, &CreateGCAux::new())?;
 
     conn.map_window(win)?;
+
+    // 2. Settings Modal Window
+    let settings_win = conn.generate_id()?;
+    let settings_aux = CreateWindowAux::new()
+        .background_pixel(Color::rgb(14, 18, 27).to_x11_pixel())
+        .override_redirect(1)
+        .event_mask(
+            EventMask::EXPOSURE
+                | EventMask::BUTTON_PRESS
+                | EventMask::POINTER_MOTION
+                | EventMask::LEAVE_WINDOW,
+        );
+
+    conn.create_window(
+        24,
+        settings_win,
+        root,
+        (cfg.x + 20) as i16,
+        (cfg.y + (initial_layout.win_h as i32) + 8) as i16,
+        180,
+        180,
+        0,
+        WindowClass::INPUT_OUTPUT,
+        screen.root_visual,
+        &settings_aux,
+    )?;
+
+    let settings_title = "Quota Settings";
+    conn.change_property8(
+        PropMode::REPLACE,
+        settings_win,
+        AtomEnum::WM_NAME,
+        AtomEnum::STRING,
+        settings_title.as_bytes(),
+    )?;
+    conn.change_property32(
+        PropMode::REPLACE,
+        settings_win,
+        net_wm_state,
+        AtomEnum::ATOM,
+        &[net_wm_state_above],
+    )?;
+
+    let settings_gc = conn.generate_id()?;
+    conn.create_gc(settings_gc, settings_win, &CreateGCAux::new())?;
+
+    let mut settings_open = false;
+    let mut settings_hovered_row: Option<usize> = None;
+    let mut settings_hovered_close = false;
+    let mut settings_fb = Framebuffer::new(180, 180);
+
     conn.flush()?;
 
     let mut fb = Framebuffer::new(initial_layout.win_w, initial_layout.win_h);
@@ -543,7 +944,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     upload_frame(&conn, win, gc, &fb)?;
 
     'main_loop: loop {
-        // 1. Check if background fetcher returned fresh quota
+        // 1. Background fetch result
         if let Ok(fresh) = rx.try_recv() {
             {
                 let mut data = current_data.lock().unwrap();
@@ -561,13 +962,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             last_poll = Instant::now();
         }
 
-        // 2. Periodic re-fetch every 5 minutes
+        // 2. Periodic poll
         if last_poll.elapsed() >= poll_interval {
             last_poll = Instant::now();
             trigger_background_fetch(tx.clone());
         }
 
-        // 3. Check Hover Grace Period Debounce
+        // 3. Hover Debounce check
         if let Some(deadline) = leave_deadline {
             if Instant::now() >= deadline {
                 leave_deadline = None;
@@ -601,34 +1002,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // 4. Process X11 Events
         while let Some(event) = conn.poll_for_event()? {
             match event {
-                x11rb::protocol::Event::Expose(_) => {
-                    let data = current_data.lock().unwrap();
-                    draw_widget(
-                        &mut fb,
-                        &data,
-                        &cfg,
-                        is_hovered,
-                        hovered_btn,
-                        hovered_logo,
-                    );
-                    upload_frame(&conn, win, gc, &fb)?;
-                }
-                x11rb::protocol::Event::EnterNotify(ev) => {
-                    if ev.detail == NotifyDetail::INFERIOR {
-                        continue;
-                    }
-                    leave_deadline = None; // Cancel any scheduled leave collapse
-                    if !is_hovered {
-                        is_hovered = true;
-                        let layout = compute_layout(&cfg, is_hovered);
-                        conn.configure_window(
-                            win,
-                            &ConfigureWindowAux::new()
-                                .width(layout.win_w as u32)
-                                .height(layout.win_h as u32),
-                        )?;
-                        conn.flush()?;
-
+                x11rb::protocol::Event::Expose(ev) => {
+                    if ev.window == win {
                         let data = current_data.lock().unwrap();
                         draw_widget(
                             &mut fb,
@@ -639,87 +1014,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             hovered_logo,
                         );
                         upload_frame(&conn, win, gc, &fb)?;
-                    }
-                }
-                x11rb::protocol::Event::LeaveNotify(ev) => {
-                    if ev.detail == NotifyDetail::INFERIOR {
-                        continue;
-                    }
-                    if !is_dragging && is_hovered {
-                        // Immediately clear button/logo hover highlights
-                        hovered_btn = None;
-                        hovered_logo = None;
-
-                        // Start grace period before collapsing the window
-                        leave_deadline = Some(Instant::now() + hover_grace_period);
-
-                        let data = current_data.lock().unwrap();
-                        draw_widget(
-                            &mut fb,
-                            &data,
+                    } else if ev.window == settings_win && settings_open {
+                        draw_settings_window(
+                            &mut settings_fb,
                             &cfg,
-                            is_hovered,
-                            None,
-                            None,
+                            settings_hovered_row,
+                            settings_hovered_close,
                         );
-                        upload_frame(&conn, win, gc, &fb)?;
+                        upload_frame(&conn, settings_win, settings_gc, &settings_fb)?;
                     }
                 }
-                x11rb::protocol::Event::MotionNotify(ev) => {
-                    if is_dragging {
-                        let dx = ev.root_x as i32 - drag_start_cursor_x;
-                        let dy = ev.root_y as i32 - drag_start_cursor_y;
-                        cfg.x = drag_start_win_x + dx;
-                        cfg.y = drag_start_win_y + dy;
-
-                        conn.configure_window(
-                            win,
-                            &ConfigureWindowAux::new().x(cfg.x).y(cfg.y),
-                        )?;
-                        conn.flush()?;
-                    } else {
-                        // Cursor is moving inside window: cancel any pending leave timer
+                x11rb::protocol::Event::EnterNotify(ev) => {
+                                        if ev.event == win {
+                        if ev.detail == NotifyDetail::INFERIOR {
+                            continue;
+                        }
                         leave_deadline = None;
-
-                        let need_expand = !is_hovered;
-                        if need_expand {
+                        if !is_hovered {
                             is_hovered = true;
-                            let new_layout = compute_layout(&cfg, is_hovered);
+                            let layout = compute_layout(&cfg, is_hovered);
                             conn.configure_window(
                                 win,
                                 &ConfigureWindowAux::new()
-                                    .width(new_layout.win_w as u32)
-                                    .height(new_layout.win_h as u32),
+                                    .width(layout.win_w as u32)
+                                    .height(layout.win_h as u32),
                             )?;
                             conn.flush()?;
-                        }
-
-                        let layout = compute_layout(&cfg, is_hovered);
-                        let mx = ev.event_x as i32;
-                        let my = ev.event_y as i32;
-
-                        let mut target_btn = None;
-                        for a in &layout.buttons {
-                            if mx >= a.x && mx < a.x + a.w && my >= a.y && my < a.y + a.h {
-                                target_btn = Some(a.btn);
-                                break;
-                            }
-                        }
-
-                        let mut target_logo = None;
-                        for a in &layout.logos {
-                            if mx >= a.x && mx < a.x + a.w && my >= a.y && my < a.y + a.h {
-                                target_logo = Some(a.logo);
-                                break;
-                            }
-                        }
-
-                        if target_btn != hovered_btn
-                            || target_logo != hovered_logo
-                            || need_expand
-                        {
-                            hovered_btn = target_btn;
-                            hovered_logo = target_logo;
 
                             let data = current_data.lock().unwrap();
                             draw_widget(
@@ -734,8 +1054,147 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
+                x11rb::protocol::Event::LeaveNotify(ev) => {
+                    if ev.event == win {
+                        if ev.detail == NotifyDetail::INFERIOR {
+                            continue;
+                        }
+                        if !is_dragging && is_hovered {
+                            hovered_btn = None;
+                            hovered_logo = None;
+                            leave_deadline = Some(Instant::now() + hover_grace_period);
+
+                            let data = current_data.lock().unwrap();
+                            draw_widget(
+                                &mut fb,
+                                &data,
+                                &cfg,
+                                is_hovered,
+                                None,
+                                None,
+                            );
+                            upload_frame(&conn, win, gc, &fb)?;
+                        }
+                    } else if ev.event == settings_win {
+                        settings_hovered_row = None;
+                        settings_hovered_close = false;
+                        if settings_open {
+                            draw_settings_window(
+                                &mut settings_fb,
+                                &cfg,
+                                None,
+                                false,
+                            );
+                            upload_frame(&conn, settings_win, settings_gc, &settings_fb)?;
+                        }
+                    }
+                }
+                x11rb::protocol::Event::MotionNotify(ev) => {
+                    if ev.event == win {
+                        if is_dragging {
+                            let dx = ev.root_x as i32 - drag_start_cursor_x;
+                            let dy = ev.root_y as i32 - drag_start_cursor_y;
+                            cfg.x = drag_start_win_x + dx;
+                            cfg.y = drag_start_win_y + dy;
+
+                            conn.configure_window(
+                                win,
+                                &ConfigureWindowAux::new().x(cfg.x).y(cfg.y),
+                            )?;
+                            if settings_open {
+                                let layout = compute_layout(&cfg, is_hovered);
+                                let sx = (cfg.x + 20).max(10);
+                                let sy = (cfg.y + (layout.win_h as i32) + 8).max(10);
+                                conn.configure_window(
+                                    settings_win,
+                                    &ConfigureWindowAux::new().x(sx).y(sy),
+                                )?;
+                            }
+                            conn.flush()?;
+                        } else {
+                            leave_deadline = None;
+                            let need_expand = !is_hovered;
+                            if need_expand {
+                                is_hovered = true;
+                                let new_layout = compute_layout(&cfg, is_hovered);
+                                conn.configure_window(
+                                    win,
+                                    &ConfigureWindowAux::new()
+                                        .width(new_layout.win_w as u32)
+                                        .height(new_layout.win_h as u32),
+                                )?;
+                                conn.flush()?;
+                            }
+
+                            let layout = compute_layout(&cfg, is_hovered);
+                            let mx = ev.event_x as i32;
+                            let my = ev.event_y as i32;
+
+                            let mut target_btn = None;
+                            for a in &layout.buttons {
+                                if mx >= a.x && mx < a.x + a.w && my >= a.y && my < a.y + a.h {
+                                    target_btn = Some(a.btn);
+                                    break;
+                                }
+                            }
+
+                            let mut target_logo = None;
+                            for s in &layout.agent_slots {
+                                let a = &s.hover_area;
+                                if mx >= a.x && mx < a.x + a.w && my >= a.y && my < a.y + a.h {
+                                    target_logo = Some(s.kind);
+                                    break;
+                                }
+                            }
+
+                            if target_btn != hovered_btn
+                                || target_logo != hovered_logo
+                                || need_expand
+                            {
+                                hovered_btn = target_btn;
+                                hovered_logo = target_logo;
+
+                                let data = current_data.lock().unwrap();
+                                draw_widget(
+                                    &mut fb,
+                                    &data,
+                                    &cfg,
+                                    is_hovered,
+                                    hovered_btn,
+                                    hovered_logo,
+                                );
+                                upload_frame(&conn, win, gc, &fb)?;
+                            }
+                        }
+                    } else if ev.event == settings_win && settings_open {
+                        let mx = ev.event_x as i32;
+                        let my = ev.event_y as i32;
+
+                        let is_close = mx >= 155 && mx <= 172 && my >= 6 && my <= 20;
+                        let mut target_row = None;
+                        for i in 0..4 {
+                            let ry = 30 + (i as i32) * 28;
+                            if mx >= 4 && mx <= 176 && my >= ry && my < ry + 26 {
+                                target_row = Some(i);
+                                break;
+                            }
+                        }
+
+                        if target_row != settings_hovered_row || is_close != settings_hovered_close {
+                            settings_hovered_row = target_row;
+                            settings_hovered_close = is_close;
+                            draw_settings_window(
+                                &mut settings_fb,
+                                &cfg,
+                                settings_hovered_row,
+                                settings_hovered_close,
+                            );
+                            upload_frame(&conn, settings_win, settings_gc, &settings_fb)?;
+                        }
+                    }
+                }
                 x11rb::protocol::Event::ButtonPress(ev) => {
-                    if ev.detail == 1 {
+                    if ev.event == win && ev.detail == 1 {
                         if let Some(btn) = hovered_btn {
                             match btn {
                                 ActionBtn::Orientation => {
@@ -787,6 +1246,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     );
                                     upload_frame(&conn, win, gc, &fb)?;
                                 }
+                                ActionBtn::Settings => {
+                                    settings_open = !settings_open;
+                                    if settings_open {
+                                        let layout = compute_layout(&cfg, is_hovered);
+                                        let sx = (cfg.x + 10).max(10);
+                                        let sy = (cfg.y + (layout.win_h as i32) + 8).max(10);
+                                        conn.configure_window(
+                                            settings_win,
+                                            &ConfigureWindowAux::new().x(sx).y(sy),
+                                        )?;
+                                        conn.map_window(settings_win)?;
+                                        draw_settings_window(
+                                            &mut settings_fb,
+                                            &cfg,
+                                            settings_hovered_row,
+                                            settings_hovered_close,
+                                        );
+                                        upload_frame(
+                                            &conn,
+                                            settings_win,
+                                            settings_gc,
+                                            &settings_fb,
+                                        )?;
+                                    } else {
+                                        conn.unmap_window(settings_win)?;
+                                    }
+                                }
                                 ActionBtn::Refresh => {
                                     println!("[quota-ui] Manual refresh clicked");
                                     trigger_background_fetch(tx.clone());
@@ -803,13 +1289,82 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             drag_start_win_x = cfg.x;
                             drag_start_win_y = cfg.y;
                         }
-                    } else if ev.detail == 3 {
+                    } else if ev.event == win && ev.detail == 3 {
                         println!("[quota-ui] Manual refresh triggered via right-click");
                         trigger_background_fetch(tx.clone());
+                    } else if ev.event == settings_win && ev.detail == 1 {
+                        let mx = ev.event_x as i32;
+                        let my = ev.event_y as i32;
+
+                        // Check Close button
+                        if mx >= 155 && mx <= 172 && my >= 6 && my <= 20 {
+                            settings_open = false;
+                            conn.unmap_window(settings_win)?;
+                        } else {
+                            // Check row click
+                            let all_kinds = [
+                                AgentKind::Claude,
+                                AgentKind::Codex,
+                                AgentKind::Gemini,
+                                AgentKind::Cursor,
+                            ];
+                            for (i, &kind) in all_kinds.iter().enumerate() {
+                                let ry = 30 + (i as i32) * 28;
+                                if mx >= 4 && mx <= 176 && my >= ry && my < ry + 26 {
+                                    let id = kind.id().to_string();
+                                    if cfg.enabled_agents.contains(&id) {
+                                        // Keep at least 1 agent
+                                        if cfg.enabled_agents.len() > 1 {
+                                            cfg.enabled_agents.retain(|s| s != &id);
+                                        }
+                                    } else {
+                                        cfg.enabled_agents.push(id);
+                                    }
+
+                                    save_config(&cfg);
+
+                                    // Redraw settings
+                                    draw_settings_window(
+                                        &mut settings_fb,
+                                        &cfg,
+                                        settings_hovered_row,
+                                        settings_hovered_close,
+                                    );
+                                    upload_frame(
+                                        &conn,
+                                        settings_win,
+                                        settings_gc,
+                                        &settings_fb,
+                                    )?;
+
+                                    // Resize and redraw main window
+                                    let new_layout = compute_layout(&cfg, is_hovered);
+                                    conn.configure_window(
+                                        win,
+                                        &ConfigureWindowAux::new()
+                                            .width(new_layout.win_w as u32)
+                                            .height(new_layout.win_h as u32),
+                                    )?;
+                                    conn.flush()?;
+
+                                    let data = current_data.lock().unwrap();
+                                    draw_widget(
+                                        &mut fb,
+                                        &data,
+                                        &cfg,
+                                        is_hovered,
+                                        hovered_btn,
+                                        hovered_logo,
+                                    );
+                                    upload_frame(&conn, win, gc, &fb)?;
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
                 x11rb::protocol::Event::ButtonRelease(ev) => {
-                    if ev.detail == 1 && is_dragging {
+                    if ev.event == win && ev.detail == 1 && is_dragging {
                         is_dragging = false;
                         save_config(&cfg);
                     }
@@ -855,6 +1410,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         thread::sleep(Duration::from_millis(16));
     }
 
+    if settings_open {
+        let _ = conn.unmap_window(settings_win);
+    }
     save_config(&cfg);
     println!("[quota-ui] Exited cleanly.");
     Ok(())

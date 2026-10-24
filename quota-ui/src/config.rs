@@ -10,9 +10,9 @@ pub enum Orientation {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScaleSize {
-    Small,  // 0.85x
-    Normal, // 1.0x
-    Large,  // 1.25x
+    Small,  // Compact
+    Normal, // Standard
+    Large,  // Large
 }
 
 impl ScaleSize {
@@ -25,12 +25,15 @@ impl ScaleSize {
     }
 }
 
+pub const ALL_AGENTS: [&str; 4] = ["claude", "codex", "gemini", "cursor"];
+
 #[derive(Debug, Clone)]
 pub struct AppConfig {
     pub x: i32,
     pub y: i32,
     pub orientation: Orientation,
     pub scale: ScaleSize,
+    pub enabled_agents: Vec<String>,
 }
 
 impl Default for AppConfig {
@@ -40,6 +43,7 @@ impl Default for AppConfig {
             y: 32,
             orientation: Orientation::Horizontal,
             scale: ScaleSize::Normal,
+            enabled_agents: ALL_AGENTS.iter().map(|&s| s.to_string()).collect(),
         }
     }
 }
@@ -84,6 +88,19 @@ pub fn load_config() -> AppConfig {
             _ => ScaleSize::Normal,
         };
     }
+    if let Some(agents_arr) = doc.get("enabled_agents").and_then(|v| v.as_array()) {
+        let mut loaded = Vec::new();
+        for item in agents_arr {
+            if let Some(name) = item.as_str() {
+                if ALL_AGENTS.contains(&name) && !loaded.contains(&name.to_string()) {
+                    loaded.push(name.to_string());
+                }
+            }
+        }
+        if !loaded.is_empty() {
+            cfg.enabled_agents = loaded;
+        }
+    }
 
     cfg
 }
@@ -102,9 +119,18 @@ pub fn save_config(cfg: &AppConfig) {
             ScaleSize::Normal => "normal",
             ScaleSize::Large => "large",
         };
+        let agents_json: Vec<String> = cfg
+            .enabled_agents
+            .iter()
+            .map(|s| format!("    \"{}\"", s))
+            .collect();
         let json_str = format!(
-            "{{\n  \"x\": {},\n  \"y\": {},\n  \"orientation\": \"{}\",\n  \"scale\": \"{}\"\n}}\n",
-            cfg.x, cfg.y, orient_str, scale_str
+            "{{\n  \"x\": {},\n  \"y\": {},\n  \"orientation\": \"{}\",\n  \"scale\": \"{}\",\n  \"enabled_agents\": [\n{}\n  ]\n}}\n",
+            cfg.x,
+            cfg.y,
+            orient_str,
+            scale_str,
+            agents_json.join(",\n")
         );
         let _ = fs::write(path, json_str);
     }

@@ -6,7 +6,7 @@ mod state;
 mod time_util;
 
 use ntfy::{build_notification_payload, send_ntfy};
-use providers::{fetch_antigravity, fetch_claude, fetch_codex, AgentQuota};
+use providers::{fetch_antigravity, fetch_claude, fetch_codex, fetch_cursor, AgentQuota};
 use state::QuotaStateStore;
 use std::env;
 use std::path::PathBuf;
@@ -39,7 +39,7 @@ impl Default for Config {
 
 fn print_usage(prog: &str) {
     println!(
-        "AI 訂閱額度監控與通知程序 (支援 Claude, Codex, Antigravity)
+        "AI 訂閱額度監控與通知程序 (支援 Claude, Codex, Antigravity, Cursor)
 
 用法:
   {prog} [選項]
@@ -138,10 +138,11 @@ fn poll_once(cfg: &Config) {
     let now_str = format_local_datetime(now_ts);
     println!("[{now_str}] 開始抓取各 Agent 訂閱額度...");
 
-    let fetchers: [(&str, fn() -> Result<AgentQuota, String>); 3] = [
+    let fetchers: [(&str, fn() -> Result<AgentQuota, String>); 4] = [
         ("claude", fetch_claude),
         ("codex", fetch_codex),
         ("antigravity", fetch_antigravity),
+        ("cursor", fetch_cursor),
     ];
 
     let mut fresh_quotas = Vec::new();

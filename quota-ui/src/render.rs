@@ -363,6 +363,49 @@ impl Framebuffer {
         }
     }
 
+    /// Cursor Logo (mouse pointer arrow in cyan, scaled for Small: 9px, Normal: 13px, Large: 22px)
+    pub fn draw_cursor_logo(&mut self, x: i32, y: i32, scale: ScaleSize) {
+        let c = Color::rgb(0, 212, 255);
+        match scale {
+            ScaleSize::Small => {
+                self.fill_rect(x + 1, y + 1, 1, 1, c);
+                self.fill_rect(x + 1, y + 2, 2, 1, c);
+                self.fill_rect(x + 1, y + 3, 3, 1, c);
+                self.fill_rect(x + 1, y + 4, 4, 1, c);
+                self.fill_rect(x + 1, y + 5, 5, 1, c);
+                self.fill_rect(x + 1, y + 6, 3, 1, c);
+                self.fill_rect(x + 1, y + 7, 2, 1, c);
+                self.fill_rect(x + 4, y + 6, 2, 1, c);
+                self.fill_rect(x + 5, y + 7, 2, 1, c);
+            }
+            ScaleSize::Normal => {
+                self.fill_rect(x + 2, y + 1, 2, 1, c);
+                self.fill_rect(x + 2, y + 2, 3, 1, c);
+                self.fill_rect(x + 2, y + 3, 4, 1, c);
+                self.fill_rect(x + 2, y + 4, 5, 1, c);
+                self.fill_rect(x + 2, y + 5, 6, 1, c);
+                self.fill_rect(x + 2, y + 6, 7, 1, c);
+                self.fill_rect(x + 2, y + 7, 8, 1, c);
+                self.fill_rect(x + 2, y + 8, 4, 1, c);
+                self.fill_rect(x + 2, y + 9, 3, 1, c);
+                self.fill_rect(x + 6, y + 8, 2, 2, c);
+                self.fill_rect(x + 7, y + 10, 2, 2, c);
+            }
+            ScaleSize::Large => {
+                let s = 2;
+                self.fill_rect(x + 1 * s, y + 1 * s, 1 * s, 1 * s, c);
+                self.fill_rect(x + 1 * s, y + 2 * s, 2 * s, 1 * s, c);
+                self.fill_rect(x + 1 * s, y + 3 * s, 3 * s, 1 * s, c);
+                self.fill_rect(x + 1 * s, y + 4 * s, 4 * s, 1 * s, c);
+                self.fill_rect(x + 1 * s, y + 5 * s, 5 * s, 1 * s, c);
+                self.fill_rect(x + 1 * s, y + 6 * s, 3 * s, 1 * s, c);
+                self.fill_rect(x + 1 * s, y + 7 * s, 2 * s, 1 * s, c);
+                self.fill_rect(x + 4 * s, y + 6 * s, 2 * s, 1 * s, c);
+                self.fill_rect(x + 5 * s, y + 7 * s, 2 * s, 1 * s, c);
+            }
+        }
+    }
+
     pub fn draw_divider_v(&mut self, x: i32) {
         let c = Color::rgb(28, 36, 48);
         let pad = (self.height as i32 / 5).max(4);
@@ -429,6 +472,45 @@ impl Framebuffer {
                 self.fill_rect(x + 5 * s, y + 3 * s, 1 * s, 3 * s, c);
                 self.fill_rect(x + 2 * s, y + 2 * s, s, s, c);
                 self.fill_rect(x + 3 * s, y + 3 * s, s, s, c);
+            }
+        }
+    }
+
+    pub fn draw_icon_settings(&mut self, x: i32, y: i32, is_hover: bool, scale: ScaleSize) {
+        let c = if is_hover {
+            Color::rgb(251, 191, 36) // Warm amber highlight
+        } else {
+            Color::rgb(148, 163, 184)
+        };
+        match scale {
+            ScaleSize::Small => {
+                self.fill_rect(x + 2, y, 3, 1, c);
+                self.fill_rect(x + 2, y + 6, 3, 1, c);
+                self.fill_rect(x, y + 2, 1, 3, c);
+                self.fill_rect(x + 6, y + 2, 1, 3, c);
+                self.fill_rect(x + 1, y + 1, 5, 5, c);
+                self.set_pixel(x + 3, y + 3, Color::rgb(12, 16, 23));
+            }
+            ScaleSize::Normal => {
+                self.fill_rect(x + 3, y, 4, 1, c);
+                self.fill_rect(x + 3, y + 9, 4, 1, c);
+                self.fill_rect(x, y + 3, 1, 4, c);
+                self.fill_rect(x + 9, y + 3, 1, 4, c);
+                self.fill_rect(x + 2, y + 2, 6, 6, c);
+                self.fill_rect(x + 4, y + 4, 2, 2, Color::rgb(12, 16, 23));
+                self.set_pixel(x + 1, y + 1, c);
+                self.set_pixel(x + 8, y + 1, c);
+                self.set_pixel(x + 1, y + 8, c);
+                self.set_pixel(x + 8, y + 8, c);
+            }
+            ScaleSize::Large => {
+                let s = 2;
+                self.fill_rect(x + 2 * s, y, 3 * s, 1 * s, c);
+                self.fill_rect(x + 2 * s, y + 6 * s, 3 * s, 1 * s, c);
+                self.fill_rect(x, y + 2 * s, 1 * s, 3 * s, c);
+                self.fill_rect(x + 6 * s, y + 2 * s, 1 * s, 3 * s, c);
+                self.fill_rect(x + 1 * s, y + 1 * s, 5 * s, 5 * s, c);
+                self.fill_rect(x + 3 * s - 1, y + 3 * s - 1, 2 * s, 2 * s, Color::rgb(12, 16, 23));
             }
         }
     }
@@ -546,5 +628,60 @@ impl Framebuffer {
                 );
             }
         }
+    }
+
+    /// Checkbox item for Settings window
+    pub fn draw_checkbox_row(
+        &mut self,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        checked: bool,
+        is_hover: bool,
+        name: &str,
+        agent_color: Color,
+    ) {
+        if is_hover {
+            self.fill_rect(x, y, w, h, Color::rgb(30, 41, 59));
+        }
+
+        // Checkbox square (12x12)
+        let cb_size = 12;
+        let cb_x = x + 10;
+        let cb_y = y + (h - cb_size) / 2;
+
+        if checked {
+            self.fill_rect(cb_x, cb_y, cb_size, cb_size, agent_color);
+            // White checkmark
+            let tick_color = Color::rgb(255, 255, 255);
+            self.set_pixel(cb_x + 3, cb_y + 6, tick_color);
+            self.set_pixel(cb_x + 4, cb_y + 7, tick_color);
+            self.set_pixel(cb_x + 5, cb_y + 8, tick_color);
+            self.set_pixel(cb_x + 6, cb_y + 7, tick_color);
+            self.set_pixel(cb_x + 7, cb_y + 5, tick_color);
+            self.set_pixel(cb_x + 8, cb_y + 4, tick_color);
+            self.set_pixel(cb_x + 9, cb_y + 3, tick_color);
+        } else {
+            for dx in 0..cb_size {
+                self.set_pixel(cb_x + dx, cb_y, Color::rgb(71, 85, 105));
+                self.set_pixel(cb_x + dx, cb_y + cb_size - 1, Color::rgb(71, 85, 105));
+            }
+            for dy in 0..cb_size {
+                self.set_pixel(cb_x, cb_y + dy, Color::rgb(71, 85, 105));
+                self.set_pixel(cb_x + cb_size - 1, cb_y + dy, Color::rgb(71, 85, 105));
+            }
+        }
+
+        // Agent color dot indicator
+        self.fill_rect(cb_x + 20, y + (h - 6) / 2, 6, 6, agent_color);
+
+        // Name
+        let text_color = if checked {
+            Color::rgb(241, 245, 249)
+        } else {
+            Color::rgb(148, 163, 184)
+        };
+        self.draw_text_scaled(cb_x + 32, y + (h - 7) / 2, name, text_color, 1);
     }
 }

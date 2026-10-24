@@ -222,7 +222,6 @@ fn obtain_antigravity_access_token() -> Result<String, String> {
 
 pub fn fetch_antigravity() -> Result<AgentQuota, String> {
     let token = obtain_antigravity_access_token()?;
-    let auth_header = format!("Bearer {token}");
 
     let endpoints = [
         "https://daily-cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels",
@@ -232,6 +231,7 @@ pub fn fetch_antigravity() -> Result<AgentQuota, String> {
     let mut last_err = String::new();
     let mut response_json = None;
 
+    let auth_header = format!("Bearer {token}");
     for url in endpoints {
         match http_request(
             "POST",
@@ -322,4 +322,168 @@ pub fn fetch_antigravity() -> Result<AgentQuota, String> {
         fetched_at: now_unix(),
         windows: vec![w],
     })
+}
+
+enum CursorAuth {
+    Bearer(String),
+    Cookie(String),
+}
+
+fn obtain_cursor_auth() -> Result<CursorAuth, String> {
+    // 1. Env vars
+    if let Ok(tok) = env::var("CURSOR_AUTH_TOKEN").or_else(|_| env::var("CURSOR_API_KEY")) {
+        if !tok.trim().is_empty() {
+            return Ok(CursorAuth::Bearer(tok.trim().to_string()));
+        }
+    }
+    if let Ok(cookie) = env::var("CURSOR_COOKIE").or_else(|_| env::var("CURSOR_SESSION_TOKEN")) {
+        if !cookie.trim().is_empty() {
+            let val = cookie.trim();
+            let c = if val.starts_with("WorkosCursorSessionToken=") {
+                val.to_string()
+            } else {
+                format!("WorkosCursorSessionToken={val}")
+            };
+            return Ok(CursorAuth::Cookie(c));
+        }
+    }
+
+    // 2. Candidate Files
+    let home = home_dir()?;
+    let candidate_files = [
+        home.join(".cursor").join("auth.json"),
+        home.join(".cursor").join("credentials.json"),
+        home.join(".config").join("cursor").join("auth.json"),
+        home.join(".config").join("Cursor").join("auth.json"),
+    ];
+
+    for path in candidate_files {
+        if path.exists() {
+            if let Ok(raw) = fs::read_to_string(&path) {
+                if let Ok(doc) = json::parse(&raw) {
+                    if let Some(t) = doc.get("accessToken").and_then(|v| v.as_str()) {
+                        if !t.is_empty() {
+                            return Ok(CursorAuth::Bearer(t.to_string()));
+                        }
+                    }
+                    if let Some(t) = doc.get("token").and_then(|v| v.as_str()) {
+                        if !t.is_empty() {
+                            return Ok(CursorAuth::Bearer(t.to_string()));
+                        }
+                    }
+                    if let Some(c) = doc.get("cookie").and_then(|v| v.as_str()) {
+                        if !c.is_empty() {
+                            let val = c.trim();
+                            let cookie = if val.starts_with("WorkosCursorSessionToken=") {
+                                val.to_string()
+                            } else {
+                                format!("WorkosCursorSessionToken={val}")
+                            };
+                            return Ok(CursorAuth::Cookie(cookie));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Err("找不到 Cursor 憑證 (~/.cursor/auth.json 或 CURSOR_AUTH_TOKEN / CURSOR_COOKIE)".to_string())
+}
+
+pub fn fetch_cursor() -> Result<AgentQuota, String> {
+    let auth = obtain_cursor_auth()?;
+    match auth {
+        CursorAuth::Bearer(token) => {
+            let auth_header = format!("Bearer {token}");
+            let body = http_request(
+                "GET",
+                "https://api2.cursor.sh/auth/usage",
+                &[
+                    ("Authorization", &auth_header),
+                    ("Accept", "application/json"),
+                    ("User-Agent", "cursor-client"),
+                ],
+                None,
+                15,
+            )?;
+
+            let data = json::parse(&body).map_err(|e| format!("解析 Cursor API 回應 JSON 失敗: {e}"))?;
+            let reset_at = data.get("startOfMonth").and_then(parse_timestamp);
+
+            let mut used_pct = 0.0;
+            if let Some(gpt4) = data.get("gpt-4") {
+                let num_req = gpt4.get("numRequests").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let max_req = gpt4.get("maxRequestUsage").and_then(|v| v.as_f64());
+                if let Some(limit) = max_req {
+                    if limit > 0.0 {
+                        used_pct = ((num_req / limit) * 100.0).clamp(0.0, 100.0);
+                    }
+                }
+            }
+
+            let rem_pct = (100.0 - used_pct).clamp(0.0, 100.0);
+            Ok(AgentQuota {
+                agent: "cursor".to_string(),
+                display_name: "Cursor".to_string(),
+                fetched_at: now_unix(),
+                windows: vec![QuotaWindow {
+                    window: "Fast Requests".to_string(),
+                    used_percent: used_pct,
+                    remaining_percent: rem_pct,
+                    reset_at,
+                }],
+            })
+        }
+        CursorAuth::Cookie(cookie) => {
+            let body = http_request(
+                "GET",
+                "https://cursor.com/api/usage-summary",
+                &[
+                    ("Cookie", &cookie),
+                    ("Accept", "application/json"),
+                    ("User-Agent", "Mozilla/5.0"),
+                ],
+                None,
+                15,
+            )?;
+
+            let data = json::parse(&body).map_err(|e| format!("解析 Cursor Dashboard JSON 失敗: {e}"))?;
+            let reset_at = data.get("billingCycleEnd").and_then(parse_timestamp);
+
+            let plan = data
+                .get("individualUsage")
+                .and_then(|u| u.get("plan"));
+
+            let used_pct = if let Some(p) = plan {
+                p.get("totalPercentUsed")
+                    .and_then(|v| v.as_f64())
+                    .or_else(|| {
+                        let used = p.get("used").and_then(|v| v.as_f64())?;
+                        let limit = p.get("limit").and_then(|v| v.as_f64())?;
+                        if limit > 0.0 {
+                            Some((used / limit) * 100.0)
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or(0.0)
+                    .clamp(0.0, 100.0)
+            } else {
+                0.0
+            };
+
+            let rem_pct = (100.0 - used_pct).clamp(0.0, 100.0);
+            Ok(AgentQuota {
+                agent: "cursor".to_string(),
+                display_name: "Cursor".to_string(),
+                fetched_at: now_unix(),
+                windows: vec![QuotaWindow {
+                    window: "Plan Usage".to_string(),
+                    used_percent: used_pct,
+                    remaining_percent: rem_pct,
+                    reset_at,
+                }],
+            })
+        }
+    }
 }
