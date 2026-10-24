@@ -1,5 +1,6 @@
 use std::fmt::Write;
-use std::process::Command;
+use std::io::Read;
+use std::time::Duration;
 
 pub fn http_request(
     method: &str,
@@ -8,55 +9,31 @@ pub fn http_request(
     body: Option<&str>,
     timeout_secs: u64,
 ) -> Result<String, String> {
-    let mut cmd = Command::new("curl");
-    cmd.arg("-sS")
-        .arg("-L")
-        .arg("-m")
-        .arg(timeout_secs.to_string())
-        .arg("-X")
-        .arg(method);
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(timeout_secs))
+        .build();
 
-    for (k, v) in headers {
-        cmd.arg("-H").arg(format!("{k}: {v}"));
+    let mut req = agent.request(method, url);
+    for &(k, v) in headers {
+        req = req.set(k, v);
     }
 
-    if let Some(b) = body {
-        cmd.arg("--data-raw").arg(b);
-    }
-
-    cmd.arg("-w").arg("\n__HTTP_STATUS__:%{http_code}").arg(url);
-
-    let output = cmd
-        .output()
-        .map_err(|e| format!("Failed to execute curl for {url}: {e}"))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!(
-            "curl command failed ({}): {}",
-            output.status,
-            stderr.trim()
-        ));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let marker = "\n__HTTP_STATUS__:";
-    let Some(idx) = stdout.rfind(marker) else {
-        return Err("Missing HTTP status marker from curl output".to_string());
+    let result = match body {
+        Some(b) => req.send_string(b),
+        None => req.call(),
     };
 
-    let response_body = &stdout[..idx];
-    let status_str = stdout[idx + marker.len()..].trim();
-    let status_code: u16 = status_str
-        .parse()
-        .map_err(|_| format!("Invalid HTTP status code '{status_str}'"))?;
-
-    if !(200..300).contains(&status_code) {
-        let preview: String = response_body.chars().take(240).collect();
-        return Err(format!("HTTP {status_code}: {}", preview.trim()));
+    match result {
+        Ok(resp) => resp
+            .into_string()
+            .map_err(|e| format!("讀取回應內容失敗 ({url}): {e}")),
+        Err(ureq::Error::Status(code, resp)) => {
+            let mut err_body = String::new();
+            let _ = resp.into_reader().take(240).read_to_string(&mut err_body);
+            Err(format!("HTTP {code}: {}", err_body.trim()))
+        }
+        Err(ureq::Error::Transport(t)) => Err(format!("網路連線失敗 ({url}): {t}")),
     }
-
-    Ok(response_body.to_string())
 }
 
 pub fn url_encode(s: &str) -> String {

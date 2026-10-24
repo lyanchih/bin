@@ -5,3 +5,9 @@ edition = "2021"
 description = "Minimal-dependency AI agent subscription quota monitor and ntfy notifier (Codex, Claude, Antigravity)"
 
 [dependencies]
+ureq = { version = "2", default-features = false, features = ["tls"] }
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
