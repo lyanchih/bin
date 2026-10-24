@@ -1,0 +1,7 @@
+[package]
+name = "notify"
+version = "0.1.0"
+edition = "2021"
+description = "Minimal-dependency AI agent subscription quota monitor and ntfy notifier (Codex, Claude, Antigravity)"
+
+[dependencies]
