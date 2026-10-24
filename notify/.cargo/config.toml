@@ -1,5 +1,5 @@
 [build]
 target = "x86_64-unknown-linux-musl"
 
-[env]
-CC_x86_64_unknown_linux_musl = "gcc"
+[target.aarch64-unknown-linux-musl]
+linker = "rust-lld"

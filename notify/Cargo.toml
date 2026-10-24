@@ -5,7 +5,8 @@ edition = "2021"
 description = "Minimal-dependency AI agent subscription quota monitor and ntfy notifier (Codex, Claude, Antigravity)"
 
 [dependencies]
-ureq = { version = "2", default-features = false, features = ["tls"] }
+ureq = { version = "3.5", default-features = false, features = ["rustls-no-provider", "rustls-webpki-roots"] }
+rustls-rustcrypto = "0.0.2-alpha"
 
 [profile.release]
 strip = true
