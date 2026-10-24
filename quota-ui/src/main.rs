@@ -684,11 +684,18 @@ fn draw_settings_window(
 
     // Close button (X)
     let close_color = if hovered_close {
+        for by in 5..22 {
+            for bx in 153..171 {
+                fb.set_pixel(bx, by, Color::rgb(45, 25, 35));
+            }
+        }
         Color::rgb(244, 63, 94)
     } else {
         Color::rgb(148, 163, 184)
     };
     for i in 0..7 {
+        fb.set_pixel(159 + i, 10 + i, close_color);
+        fb.set_pixel(159 + 6 - i, 10 + i, close_color);
         fb.set_pixel(160 + i, 10 + i, close_color);
         fb.set_pixel(160 + 6 - i, 10 + i, close_color);
     }
@@ -1170,7 +1177,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let mx = ev.event_x as i32;
                         let my = ev.event_y as i32;
 
-                        let is_close = mx >= 155 && mx <= 172 && my >= 6 && my <= 20;
+                        let is_close = mx >= 148 && mx <= 176 && my >= 2 && my <= 26;
                         let mut target_row = None;
                         for i in 0..4 {
                             let ry = 30 + (i as i32) * 28;
@@ -1270,7 +1277,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             &settings_fb,
                                         )?;
                                     } else {
+                                        settings_open = false;
+                                        settings_hovered_row = None;
+                                        settings_hovered_close = false;
                                         conn.unmap_window(settings_win)?;
+                                        conn.flush()?;
                                     }
                                 }
                                 ActionBtn::Refresh => {
@@ -1292,14 +1303,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     } else if ev.event == win && ev.detail == 3 {
                         println!("[quota-ui] Manual refresh triggered via right-click");
                         trigger_background_fetch(tx.clone());
+                    } else if ev.event == settings_win && ev.detail == 3 {
+                        settings_open = false;
+                        settings_hovered_row = None;
+                        settings_hovered_close = false;
+                        conn.unmap_window(settings_win)?;
+                        conn.flush()?;
                     } else if ev.event == settings_win && ev.detail == 1 {
                         let mx = ev.event_x as i32;
                         let my = ev.event_y as i32;
 
                         // Check Close button
-                        if mx >= 155 && mx <= 172 && my >= 6 && my <= 20 {
+                        if mx >= 148 && mx <= 176 && my >= 2 && my <= 26 {
                             settings_open = false;
+                            settings_hovered_row = None;
+                            settings_hovered_close = false;
                             conn.unmap_window(settings_win)?;
+                            conn.flush()?;
                         } else {
                             // Check row click
                             let all_kinds = [
