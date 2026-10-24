@@ -1,0 +1,42 @@
+[
+  {
+    "id": "notify",
+    "name": "notify",
+    "title": "AI 訂閱額度監控與通知程序",
+    "language": "Rust",
+    "tags": ["Rust", "musl-static", "ntfy", "Claude", "Codex", "Antigravity"],
+    "summary": "定時抓取 Claude、Codex 與 Antigravity (Gemini) 訂閱額度，當已用額度跨越 80%、85%、90%、95% 門檻時自動推播美化通知至 ntfy (lyan-ai-quota)。",
+    "description": [
+      "支援 Agent：Claude (5h / 7d)、Codex (5h / 7d)、Antigravity (Gemini 池)",
+      "智慧去重：暫存檔紀錄抓取時間、剩餘量與刷新時間，同一刷新週期內每個門檻僅通知一次",
+      "零外部執行期依賴：以 musl 完全靜態連結並內建純 Rust TLS (rustls-rustcrypto)，任何乾淨 Ubuntu / Linux 下載即可直接執行"
+    ],
+    "usage": [
+      "notify                # 預設每 5 分鐘檢查一次並常駐執行",
+      "notify -i 10          # 指定每 10 分鐘檢查一次",
+      "notify --once         # 單次抓取並更新暫存檔後結束",
+      "notify --test-notify  # 立即發送一則測試通知至 ntfy"
+    ],
+    "sourceDir": "notify/",
+    "binaries": [
+      {
+        "name": "notify",
+        "arch": "x86_64 (amd64)",
+        "target": "x86_64-unknown-linux-musl",
+        "path": "bin/notify",
+        "downloadName": "notify",
+        "size": "2.3 MB",
+        "note": "Linux x86_64 完全靜態執行檔 (Static-PIE)"
+      },
+      {
+        "name": "notify-aarch64",
+        "arch": "ARM64 (aarch64)",
+        "target": "aarch64-unknown-linux-musl",
+        "path": "bin/notify-aarch64",
+        "downloadName": "notify-aarch64",
+        "size": "1.9 MB",
+        "note": "Linux ARM64 完全靜態執行檔 (Static)"
+      }
+    ]
+  }
+]
