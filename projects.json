@@ -38,5 +38,43 @@
         "note": "Linux ARM64 完全靜態執行檔 (Static)"
       }
     ]
+  },
+  {
+    "id": "quota-ui",
+    "name": "quota-ui",
+    "title": "AI 訂閱額度光圈浮動 HUD 小工具",
+    "language": "Rust",
+    "tags": ["Rust", "musl-static", "X11", "Ring-Meter", "Always-on-Top", "Floating-HUD"],
+    "summary": "超極小 (236x38px) 桌面置頂浮動膠囊小工具，整合圓環進度光圈與 5h 即時使用率數字，支援滑鼠任意拖曳移動與自動記憶位置。",
+    "description": [
+      "極小面積覆蓋：只有 Logo 與圓環數字光圈 (Ring Gauge)，順時針顯示目前 5 小時使用百分比",
+      "三色警示：< 80% 正常色、≥ 80% 琥珀橙、≥ 90% 高亮桃紅警戒",
+      "自由拖動與記憶：按住膠囊列任意處隨意拖曳擺放，放開自動保存位置 (~/.config/quota-ui/position.json)",
+      "純 Rust X11 零環境依賴：不需 GTK、Qt 或外部 C 庫，純 musl 靜態單一執行檔，秒開即用"
+    ],
+    "usage": [
+      "quota-ui              # 啟動浮動光圈膠囊 HUD (滑鼠拖曳移動，右鍵手動刷新，Esc 鍵退出)"
+    ],
+    "sourceDir": "quota-ui/",
+    "binaries": [
+      {
+        "name": "quota-ui",
+        "arch": "x86_64 (amd64)",
+        "target": "x86_64-unknown-linux-musl",
+        "path": "bin/quota-ui",
+        "downloadName": "quota-ui",
+        "size": "2.4 MB",
+        "note": "Linux x86_64 完全靜態執行檔 (Static-PIE)"
+      },
+      {
+        "name": "quota-ui-aarch64",
+        "arch": "ARM64 (aarch64)",
+        "target": "aarch64-unknown-linux-musl",
+        "path": "bin/quota-ui-aarch64",
+        "downloadName": "quota-ui-aarch64",
+        "size": "2.0 MB",
+        "note": "Linux ARM64 完全靜態執行檔 (Static)"
+      }
+    ]
   }
 ]
