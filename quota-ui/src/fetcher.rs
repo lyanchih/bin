@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone, Default)]
 pub struct QuotaSummary {
+    pub reset_at: [Option<u64>; 4],
     pub claude_5h: Option<f64>,
     pub codex_5h: Option<f64>,
     pub gemini: Option<f64>,
@@ -22,7 +23,7 @@ fn home_dir() -> Result<PathBuf, String> {
         .map_err(|_| "Environment variable HOME is not set".to_string())
 }
 
-pub fn fetch_claude_5h() -> Result<f64, String> {
+pub fn fetch_claude_5h() -> Result<(f64, Option<u64>), String> {
     let cred_path = home_dir()?.join(".claude").join(".credentials.json");
     let raw = fs::read_to_string(&cred_path)
         .map_err(|e| format!("無法讀取 {}: {e}", cred_path.display()))?;
@@ -55,10 +56,16 @@ pub fn fetch_claude_5h() -> Result<f64, String> {
         .and_then(|v| v.as_f64())
         .ok_or_else(|| "找不到 five_hour.utilization".to_string())?;
 
-    Ok(used.clamp(0.0, 100.0))
+    Ok((
+        used.clamp(0.0, 100.0),
+        data.get("five_hour")
+            .and_then(|w| w.get("resets_at"))
+            .and_then(|v| v.as_str())
+            .and_then(parse_reset_time),
+    ))
 }
 
-pub fn fetch_codex_5h() -> Result<f64, String> {
+pub fn fetch_codex_5h() -> Result<(f64, Option<u64>), String> {
     let auth_path = home_dir()?.join(".codex").join("auth.json");
     let raw = fs::read_to_string(&auth_path)
         .map_err(|e| format!("無法讀取 {}: {e}", auth_path.display()))?;
@@ -93,7 +100,20 @@ pub fn fetch_codex_5h() -> Result<f64, String> {
         .and_then(|v| v.as_f64())
         .ok_or_else(|| "找不到 primary_window.used_percent".to_string())?;
 
-    Ok(used.clamp(0.0, 100.0))
+    let window = data.get("rate_limit").and_then(|r| r.get("primary_window"));
+    let reset = window
+        .and_then(|w| w.get("reset_at"))
+        .and_then(|v| v.as_f64())
+        .filter(|v| v.is_finite() && *v >= 0.0)
+        .map(|v| v as u64)
+        .or_else(|| {
+            window
+                .and_then(|w| w.get("reset_after_seconds"))
+                .and_then(|v| v.as_f64())
+                .filter(|v| v.is_finite() && *v >= 0.0)
+                .map(|v| now_seconds().saturating_add(v as u64))
+        });
+    Ok((used.clamp(0.0, 100.0), reset))
 }
 
 fn obtain_antigravity_access_token() -> Result<String, String> {
@@ -162,7 +182,7 @@ fn obtain_antigravity_access_token() -> Result<String, String> {
     Err("找不到 Antigravity 憑證".to_string())
 }
 
-pub fn fetch_gemini() -> Result<f64, String> {
+pub fn fetch_gemini() -> Result<(f64, Option<u64>), String> {
     let token = obtain_antigravity_access_token()?;
     let auth_header = format!("Bearer {token}");
 
@@ -203,13 +223,17 @@ pub fn fetch_gemini() -> Result<f64, String> {
         .and_then(|m| m.as_object())
         .ok_or_else(|| "找不到 models".to_string())?;
 
-    let mut max_used: Option<f64> = None;
+    let mut max_used: Option<(f64, Option<u64>)> = None;
 
     for (model_id, model_info) in models {
         if !model_id.starts_with("gemini-") {
             continue;
         }
-        if model_info.get("displayName").and_then(|v| v.as_str()).is_none() {
+        if model_info
+            .get("displayName")
+            .and_then(|v| v.as_str())
+            .is_none()
+        {
             continue;
         }
         let Some(q) = model_info.get("quotaInfo") else {
@@ -223,10 +247,12 @@ pub fn fetch_gemini() -> Result<f64, String> {
         let rem_pct = rem_frac * 100.0;
         let used_pct = (100.0 - rem_pct).clamp(0.0, 100.0);
 
-        match max_used {
-            None => max_used = Some(used_pct),
-            Some(v) if used_pct > v => max_used = Some(used_pct),
-            _ => {}
+        let reset = q
+            .get("resetTime")
+            .and_then(|v| v.as_str())
+            .and_then(parse_reset_time);
+        if max_used.as_ref().map_or(true, |v| used_pct > v.0) {
+            max_used = Some((used_pct, reset));
         }
     }
 
@@ -297,7 +323,7 @@ fn obtain_cursor_auth() -> Result<CursorAuth, String> {
     Err("找不到 Cursor 憑證 (~/.cursor/auth.json 或 CURSOR_AUTH_TOKEN / CURSOR_COOKIE)".to_string())
 }
 
-pub fn fetch_cursor() -> Result<f64, String> {
+pub fn fetch_cursor() -> Result<(f64, Option<u64>), String> {
     let auth = obtain_cursor_auth()?;
     match auth {
         CursorAuth::Bearer(token) => {
@@ -314,16 +340,20 @@ pub fn fetch_cursor() -> Result<f64, String> {
                 10,
             )?;
             let data = json::parse(&body).map_err(|e| format!("解析 JSON 失敗: {e}"))?;
+            let reset = None; // Legacy API has no reset timestamp.
             if let Some(gpt4) = data.get("gpt-4") {
-                let num_req = gpt4.get("numRequests").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let num_req = gpt4
+                    .get("numRequests")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
                 let max_req = gpt4.get("maxRequestUsage").and_then(|v| v.as_f64());
                 if let Some(limit) = max_req {
                     if limit > 0.0 {
-                        return Ok(((num_req / limit) * 100.0).clamp(0.0, 100.0));
+                        return Ok((((num_req / limit) * 100.0).clamp(0.0, 100.0), reset));
                     }
                 }
             }
-            Ok(0.0)
+            Ok((0.0, reset))
         }
         CursorAuth::Cookie(cookie) => {
             let body = http_request(
@@ -338,20 +368,24 @@ pub fn fetch_cursor() -> Result<f64, String> {
                 10,
             )?;
             let data = json::parse(&body).map_err(|e| format!("解析 JSON 失敗: {e}"))?;
+            let reset = data
+                .get("billingCycleEnd")
+                .and_then(|v| v.as_str())
+                .and_then(parse_reset_time);
             if let Some(plan) = data.get("individualUsage").and_then(|u| u.get("plan")) {
                 if let Some(pct) = plan.get("totalPercentUsed").and_then(|v| v.as_f64()) {
-                    return Ok(pct.clamp(0.0, 100.0));
+                    return Ok((pct.clamp(0.0, 100.0), reset));
                 }
                 if let (Some(used), Some(limit)) = (
                     plan.get("used").and_then(|v| v.as_f64()),
                     plan.get("limit").and_then(|v| v.as_f64()),
                 ) {
                     if limit > 0.0 {
-                        return Ok(((used / limit) * 100.0).clamp(0.0, 100.0));
+                        return Ok((((used / limit) * 100.0).clamp(0.0, 100.0), reset));
                     }
                 }
             }
-            Ok(0.0)
+            Ok((0.0, reset))
         }
     }
 }
@@ -360,7 +394,10 @@ pub fn fetch_all() -> QuotaSummary {
     let mut s = QuotaSummary::default();
 
     match fetch_claude_5h() {
-        Ok(v) => s.claude_5h = Some(v),
+        Ok((v, reset)) => {
+            s.claude_5h = Some(v);
+            s.reset_at[0] = reset;
+        }
         Err(e) => {
             eprintln!("[quota-ui] Claude fetch error: {e}");
             s.error_claude = true;
@@ -368,7 +405,10 @@ pub fn fetch_all() -> QuotaSummary {
     }
 
     match fetch_codex_5h() {
-        Ok(v) => s.codex_5h = Some(v),
+        Ok((v, reset)) => {
+            s.codex_5h = Some(v);
+            s.reset_at[1] = reset;
+        }
         Err(e) => {
             eprintln!("[quota-ui] Codex fetch error: {e}");
             s.error_codex = true;
@@ -376,7 +416,10 @@ pub fn fetch_all() -> QuotaSummary {
     }
 
     match fetch_gemini() {
-        Ok(v) => s.gemini = Some(v),
+        Ok((v, reset)) => {
+            s.gemini = Some(v);
+            s.reset_at[2] = reset;
+        }
         Err(e) => {
             eprintln!("[quota-ui] Gemini fetch error: {e}");
             s.error_gemini = true;
@@ -384,7 +427,10 @@ pub fn fetch_all() -> QuotaSummary {
     }
 
     match fetch_cursor() {
-        Ok(v) => s.cursor = Some(v),
+        Ok((v, reset)) => {
+            s.cursor = Some(v);
+            s.reset_at[3] = reset;
+        }
         Err(e) => {
             eprintln!("[quota-ui] Cursor fetch error: {e}");
             s.error_cursor = true;
@@ -392,4 +438,59 @@ pub fn fetch_all() -> QuotaSummary {
     }
 
     s
+}
+
+fn now_seconds() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+// API timestamps use RFC 3339; GNU date handles fractional seconds and UTC offsets.
+fn parse_reset_time(value: &str) -> Option<u64> {
+    let output = std::process::Command::new("date")
+        .args(["--date", value, "+%s"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    std::str::from_utf8(&output.stdout)
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
+}
+
+pub fn tooltip(name: &str, reset: Option<u64>, now: u64) -> String {
+    match reset {
+        Some(reset) => {
+            let seconds = reset.saturating_sub(now);
+            let minutes = seconds / 60 + u64::from(seconds % 60 != 0);
+            format!("{name} ({}h{}m)", minutes / 60, minutes % 60)
+        }
+        None => name.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn reset_timestamps() {
+        assert_eq!(parse_reset_time("2026-10-27T03:09:00Z"), Some(1793070540));
+        assert_eq!(
+            parse_reset_time("2026-10-27T11:09:00.123+08:00"),
+            Some(1793070540)
+        );
+        assert_eq!(parse_reset_time("invalid"), None);
+    }
+    #[test]
+    fn countdown() {
+        assert_eq!(tooltip("Claude", Some(11340), 0), "Claude (3h9m)");
+        assert_eq!(tooltip("Codex", Some(61), 0), "Codex (0h2m)");
+        assert_eq!(tooltip("Codex", Some(1), 2), "Codex (0h0m)");
+        assert_eq!(tooltip("Cursor", None, 0), "Cursor");
+    }
 }

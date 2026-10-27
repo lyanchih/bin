@@ -658,10 +658,17 @@ fn draw_widget(
     // 5. Logo Tooltip (when logo hovered)
     if let Some(target) = hovered_logo {
         if let Some(slot) = layout.agent_slots.iter().find(|s| s.kind == target) {
+            let index = match target {
+                AgentKind::Claude => 0, AgentKind::Codex => 1,
+                AgentKind::Gemini => 2, AgentKind::Cursor => 3,
+            };
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default().as_secs();
+            let text = fetcher::tooltip(slot.kind.name(), data.reset_at[index], now);
             fb.draw_tooltip(
                 slot.hover_area.tooltip_anchor.0,
                 slot.hover_area.tooltip_anchor.1,
-                slot.kind.name(),
+                &text,
                 cfg.scale,
             );
         }
@@ -1041,6 +1048,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut last_poll = Instant::now();
     let poll_interval = Duration::from_secs(300); // 5 minutes
 
+    let mut last_tooltip_redraw = Instant::now();
     // Initial render
     {
         let data = current_data.lock().unwrap();
@@ -1072,6 +1080,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             upload_frame(&conn, win, gc, &fb)?;
             last_poll = Instant::now();
+        }
+
+        if hovered_logo.is_some() && last_tooltip_redraw.elapsed() >= Duration::from_secs(1) {
+            let data = current_data.lock().unwrap();
+            draw_widget(&mut fb, &data, &cfg, is_hovered, hovered_btn, hovered_logo);
+            upload_frame(&conn, win, gc, &fb)?;
+            last_tooltip_redraw = Instant::now();
         }
 
         // 2. Periodic poll
