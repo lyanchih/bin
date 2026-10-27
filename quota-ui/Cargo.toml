@@ -5,7 +5,7 @@ edition = "2021"
 description = "Ultra-compact floating AI quota ring meter HUD for Linux desktop (Claude, Codex, Antigravity)"
 
 [dependencies]
-x11rb = { version = "0.13", default-features = false }
+x11rb = { version = "0.13", default-features = false, features = ["randr"] }
 ureq = { version = "3.5", default-features = false, features = ["rustls-no-provider", "rustls-webpki-roots"] }
 rustls-rustcrypto = "0.0.2-alpha"
 

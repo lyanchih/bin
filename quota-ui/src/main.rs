@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 use x11rb::connection::Connection;
+use x11rb::protocol::randr::{self, ConnectionExt as _};
 use x11rb::protocol::xproto::*;
 use x11rb::rust_connection::RustConnection;
 use x11rb::wrapper::ConnectionExt as _;
@@ -775,6 +776,124 @@ fn trigger_background_fetch(tx: Sender<QuotaSummary>) {
     });
 }
 
+/// Borderless + always-on-top hints for managed windows (no override-redirect).
+/// override-redirect HUDs are often invisible under GNOME Wayland/XWayland.
+fn apply_hud_wm_hints(
+    conn: &RustConnection,
+    win: Window,
+    title: &str,
+    net_wm_state: Atom,
+    net_wm_state_above: Atom,
+    net_wm_window_type: Atom,
+    net_wm_type_utility: Atom,
+) -> Result<(), Box<dyn std::error::Error>> {
+    conn.change_property8(
+        PropMode::REPLACE,
+        win,
+        AtomEnum::WM_NAME,
+        AtomEnum::STRING,
+        title.as_bytes(),
+    )?;
+
+    // Motif: decorations = 0 (no title bar / borders). flags bit1 = MWM_HINTS_DECORATIONS
+    let motif_hints = conn.intern_atom(false, b"_MOTIF_WM_HINTS")?.reply()?.atom;
+    conn.change_property32(
+        PropMode::REPLACE,
+        win,
+        motif_hints,
+        motif_hints,
+        &[2, 0, 0, 0, 0],
+    )?;
+
+    conn.change_property32(
+        PropMode::REPLACE,
+        win,
+        net_wm_window_type,
+        AtomEnum::ATOM,
+        &[net_wm_type_utility],
+    )?;
+
+    conn.change_property32(
+        PropMode::REPLACE,
+        win,
+        net_wm_state,
+        AtomEnum::ATOM,
+        &[net_wm_state_above],
+    )?;
+
+    Ok(())
+}
+
+/// Ask the WM to keep a mapped window above others (_NET_WM_STATE_ADD ABOVE).
+/// Must be sent after map_window; Mutter ignores the property on its own.
+fn request_above(
+    conn: &RustConnection,
+    win: Window,
+    root: Window,
+    net_wm_state: Atom,
+    net_wm_state_above: Atom,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let event = ClientMessageEvent::new(
+        32,
+        win,
+        net_wm_state,
+        [1, net_wm_state_above, 0, 0, 0], // 1 = _NET_WM_STATE_ADD
+    );
+    conn.send_event(
+        false,
+        root,
+        EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY,
+        event,
+    )?;
+
+    Ok(())
+}
+
+/// Keep the HUD on a real monitor. With multi-monitor layouts the default/saved
+/// position can fall into a gap between screens (e.g. 100,32 when the left
+/// monitor starts at y=186), leaving the window mapped but invisible.
+fn clamp_to_monitor(conn: &RustConnection, root: Window, cfg: &mut AppConfig, w: i32, h: i32) {
+    let monitors = match conn
+        .randr_get_monitors(root, true)
+        .ok()
+        .and_then(|c| c.reply().ok())
+    {
+        Some(r) if !r.monitors.is_empty() => r.monitors,
+        _ => return,
+    };
+
+    let rect = |m: &randr::MonitorInfo| {
+        (
+            m.x as i32,
+            m.y as i32,
+            m.x as i32 + m.width as i32,
+            m.y as i32 + m.height as i32,
+        )
+    };
+
+    // Already fully on some monitor: keep the user's position.
+    if monitors.iter().any(|m| {
+        let (x0, y0, x1, y1) = rect(m);
+        cfg.x >= x0 && cfg.y >= y0 && cfg.x + w <= x1 && cfg.y + h <= y1
+    }) {
+        return;
+    }
+
+    let target = monitors
+        .iter()
+        .find(|m| m.primary)
+        .unwrap_or(&monitors[0]);
+    let (x0, y0, x1, y1) = rect(target);
+    let new_x = (x0 + 100).min(x1 - w).max(x0);
+    let new_y = (y0 + 32).min(y1 - h).max(y0);
+    println!(
+        "[quota-ui] Position ({}, {}) is off-screen; moving to ({}, {})",
+        cfg.x, cfg.y, new_x, new_y
+    );
+    cfg.x = new_x;
+    cfg.y = new_y;
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("[quota-ui] Starting ultra-compact AI Quota Ring Meter...");
 
@@ -792,12 +911,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let hover_grace_period = Duration::from_millis(250);
 
     let initial_layout = compute_layout(&cfg, is_hovered);
+    clamp_to_monitor(
+        &conn,
+        root,
+        &mut cfg,
+        initial_layout.win_w as i32,
+        initial_layout.win_h as i32,
+    );
 
-    // 1. Main HUD Window
+    let net_wm_state = conn.intern_atom(false, b"_NET_WM_STATE")?.reply()?.atom;
+    let net_wm_state_above = conn
+        .intern_atom(false, b"_NET_WM_STATE_ABOVE")?
+        .reply()?
+        .atom;
+    let net_wm_window_type = conn
+        .intern_atom(false, b"_NET_WM_WINDOW_TYPE")?
+        .reply()?
+        .atom;
+    let net_wm_type_utility = conn
+        .intern_atom(false, b"_NET_WM_WINDOW_TYPE_UTILITY")?
+        .reply()?
+        .atom;
+
+    // 1. Main HUD Window (WM-managed: works on GNOME Wayland via XWayland)
     let win = conn.generate_id()?;
     let win_aux = CreateWindowAux::new()
         .background_pixel(Color::rgb(12, 16, 23).to_x11_pixel())
-        .override_redirect(1) // Borderless floating HUD window
         .event_mask(
             EventMask::EXPOSURE
                 | EventMask::BUTTON_PRESS
@@ -805,7 +944,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 | EventMask::POINTER_MOTION
                 | EventMask::ENTER_WINDOW
                 | EventMask::LEAVE_WINDOW
-                | EventMask::KEY_PRESS,
+                | EventMask::KEY_PRESS
+                | EventMask::STRUCTURE_NOTIFY,
         );
 
     conn.create_window(
@@ -822,61 +962,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &win_aux,
     )?;
 
-    // Set Window Title
-    let title = "AI Quota HUD";
-    conn.change_property8(
-        PropMode::REPLACE,
+    apply_hud_wm_hints(
+        &conn,
         win,
-        AtomEnum::WM_NAME,
-        AtomEnum::STRING,
-        title.as_bytes(),
-    )?;
-
-    // Set _NET_WM_STATE to ABOVE (Always on top)
-    let net_wm_state = conn.intern_atom(false, b"_NET_WM_STATE")?.reply()?.atom;
-    let net_wm_state_above = conn
-        .intern_atom(false, b"_NET_WM_STATE_ABOVE")?
-        .reply()?
-        .atom;
-    conn.change_property32(
-        PropMode::REPLACE,
-        win,
+        "AI Quota HUD",
         net_wm_state,
-        AtomEnum::ATOM,
-        &[net_wm_state_above],
-    )?;
-
-    let net_wm_window_type = conn
-        .intern_atom(false, b"_NET_WM_WINDOW_TYPE")?
-        .reply()?
-        .atom;
-    let net_wm_type_utility = conn
-        .intern_atom(false, b"_NET_WM_WINDOW_TYPE_UTILITY")?
-        .reply()?
-        .atom;
-    conn.change_property32(
-        PropMode::REPLACE,
-        win,
+        net_wm_state_above,
         net_wm_window_type,
-        AtomEnum::ATOM,
-        &[net_wm_type_utility],
+        net_wm_type_utility,
     )?;
 
     let gc = conn.generate_id()?;
     conn.create_gc(gc, win, &CreateGCAux::new())?;
 
     conn.map_window(win)?;
+    request_above(&conn, win, root, net_wm_state, net_wm_state_above)?;
 
     // 2. Settings Modal Window
     let settings_win = conn.generate_id()?;
     let settings_aux = CreateWindowAux::new()
         .background_pixel(Color::rgb(14, 18, 27).to_x11_pixel())
-        .override_redirect(1)
         .event_mask(
             EventMask::EXPOSURE
                 | EventMask::BUTTON_PRESS
                 | EventMask::POINTER_MOTION
-                | EventMask::LEAVE_WINDOW,
+                | EventMask::LEAVE_WINDOW
+                | EventMask::STRUCTURE_NOTIFY,
         );
 
     conn.create_window(
@@ -893,20 +1004,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &settings_aux,
     )?;
 
-    let settings_title = "Quota Settings";
-    conn.change_property8(
-        PropMode::REPLACE,
+    apply_hud_wm_hints(
+        &conn,
         settings_win,
-        AtomEnum::WM_NAME,
-        AtomEnum::STRING,
-        settings_title.as_bytes(),
-    )?;
-    conn.change_property32(
-        PropMode::REPLACE,
-        settings_win,
+        "Quota Settings",
         net_wm_state,
-        AtomEnum::ATOM,
-        &[net_wm_state_above],
+        net_wm_state_above,
+        net_wm_window_type,
+        net_wm_type_utility,
     )?;
 
     let settings_gc = conn.generate_id()?;
@@ -1264,6 +1369,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             &ConfigureWindowAux::new().x(sx).y(sy),
                                         )?;
                                         conn.map_window(settings_win)?;
+                                        request_above(
+                                            &conn,
+                                            settings_win,
+                                            root,
+                                            net_wm_state,
+                                            net_wm_state_above,
+                                        )?;
                                         draw_settings_window(
                                             &mut settings_fb,
                                             &cfg,
