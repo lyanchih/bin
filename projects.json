@@ -103,7 +103,7 @@
         "name": "sys-info",
         "arch": "x86_64 (amd64)",
         "target": "x86_64-unknown-linux-musl",
-        "path": "bin/sys-info",
+        "path": "bin/sys-info?schema=4",
         "downloadName": "sys-info",
         "size": "3.5 MB",
         "note": "Linux x86_64 完全靜態執行檔 (Static-PIE)"
@@ -112,7 +112,7 @@
         "name": "sys-info-aarch64",
         "arch": "ARM64 (aarch64)",
         "target": "aarch64-unknown-linux-musl",
-        "path": "bin/sys-info-aarch64",
+        "path": "bin/sys-info-aarch64?schema=4",
         "downloadName": "sys-info-aarch64",
         "size": "2.9 MB",
         "note": "Linux ARM64 完全靜態執行檔 (Static)"
@@ -121,7 +121,7 @@
         "name": "sys-info（macOS Intel）",
         "arch": "Intel (x86_64)",
         "target": "x86_64-apple-darwin",
-        "path": "bin/apple/sys-info",
+        "path": "bin/apple/sys-info?schema=4",
         "downloadName": "sys-info",
         "note": "macOS 11 以上"
       },
@@ -129,7 +129,7 @@
         "name": "sys-info（Apple Silicon）",
         "arch": "Apple Silicon (ARM64)",
         "target": "aarch64-apple-darwin",
-        "path": "bin/apple/sys-info-aarch64",
+        "path": "bin/apple/sys-info-aarch64?schema=4",
         "downloadName": "sys-info-aarch64",
         "note": "macOS 11 以上"
       },
@@ -137,7 +137,7 @@
         "name": "sys-info.exe（Windows x64）",
         "arch": "x86_64 (amd64)",
         "target": "x86_64-pc-windows-msvc",
-        "path": "bin/windows/sys-info.exe?v=0.1.0",
+        "path": "bin/windows/sys-info.exe?schema=4",
         "downloadName": "sys-info.exe",
         "note": "Windows x64"
       },
@@ -145,7 +145,7 @@
         "name": "sys-info.exe（Windows ARM64）",
         "arch": "ARM64 (aarch64)",
         "target": "aarch64-pc-windows-msvc",
-        "path": "bin/windows/sys-info-aarch64.exe?v=0.1.0",
+        "path": "bin/windows/sys-info-aarch64.exe?schema=4",
         "downloadName": "sys-info-aarch64.exe",
         "note": "Windows ARM64"
       }

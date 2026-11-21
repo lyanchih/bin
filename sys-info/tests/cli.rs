@@ -44,7 +44,7 @@ fn cli_emits_inventory_in_all_four_formats() {
             }
             serde_json::from_slice(&body).expect("decode JSON")
         };
-        assert_eq!(report["schema_version"], 3);
+        assert_eq!(report["schema_version"], 4);
         assert!(report["runtime"]["system_time"].is_u64());
         assert!(report["runtime"]["uptime"].is_u64());
         if let Some(boot_id) = report["runtime"].get("boot_id") {
@@ -149,8 +149,14 @@ fn cli_emits_inventory_in_all_four_formats() {
         if let Some(ip) = external_ip {
             assert!(is_ipv4(ip) && found_external_ip);
         }
-        for server in network["dns_servers"].as_array().into_iter().flatten() {
-            assert!(is_ipv4(server));
+        assert!(network.get("dns_servers").is_none());
+        if let Some(server) = network.get("dns_server") {
+            assert!(
+                server
+                    .as_str()
+                    .and_then(|ip| ip.parse::<std::net::Ipv4Addr>().ok())
+                    .is_some_and(|ip| !ip.is_loopback())
+            );
         }
         for error in report["error"].as_array().into_iter().flatten() {
             assert!(error["field"].is_string());

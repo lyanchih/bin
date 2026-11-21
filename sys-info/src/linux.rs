@@ -242,10 +242,10 @@ pub fn network(errors: &mut Errors) -> Network {
                     .split_whitespace();
                 if words.next() == Some("nameserver") {
                     match unix::dns_address(words.next().unwrap_or_default()) {
-                        Ok(Some(address)) => network.add_dns(address),
+                        Ok(Some(address)) => network.consider_dns(address),
                         Ok(None) => {}
                         Err(_) => errors.add(
-                            "network.dns_servers",
+                            "network.dns_server",
                             None,
                             "invalid resolver nameserver entry",
                         ),
@@ -253,7 +253,7 @@ pub fn network(errors: &mut Errors) -> Network {
                 }
             }
         }
-        Err(error) => errors.add("network.dns_servers", None, error.to_string()),
+        Err(error) => errors.add("network.dns_server", None, error.to_string()),
     }
     if let Some(route) = routes.first() {
         let ip = network

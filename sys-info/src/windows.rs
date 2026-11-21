@@ -361,9 +361,9 @@ fn collect_adapters(buffer: &[u64], network: &mut Network, errors: &mut Errors) 
         while let Some(entry) = unsafe { dns.as_ref() } {
             dns = entry.Next;
             match unsafe { socket_ipv4(&entry.Address) } {
-                Ok(Some(ip)) => network.add_dns(ip.to_string()),
+                Ok(Some(ip)) => network.consider_dns(ip),
                 Ok(None) => {}
-                Err(error) => errors.add("network.dns_servers", None, error),
+                Err(error) => errors.add("network.dns_server", None, error),
             }
         }
         let up = adapter.OperStatus == IfOperStatusUp;

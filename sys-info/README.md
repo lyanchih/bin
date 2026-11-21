@@ -31,7 +31,7 @@ sys-info -t json -p mqtt://broker1.example/hosts/inventory -p mqtt://broker2.exa
 
 | 欄位 | 內容 |
 | --- | --- |
-| `schema_version` | 結構版本，目前為 3 |
+| `schema_version` | 結構版本，目前為 4 |
 | `cpu` | 製造商 `band`、型號 `type`、基礎頻率 `frequency`（Hz）、架構 `arch`、邏輯 CPU 數 `count` |
 | `gpu[]` | 裝置識別 `id`、製造商 `band`、型號 `type`、驅動版本 `version`、記憶體容量 `size` 與類型 `memory_kind`。視平台另附 `pci_id`、`driver` 或 `shared_limit` |
 | `ram` | 系統可見的實體記憶體總容量 `total` |
@@ -39,7 +39,7 @@ sys-info -t json -p mqtt://broker1.example/hosts/inventory -p mqtt://broker2.exa
 | `mount[]` | 已掛載的網路檔案系統。各筆含 `mount_point`，可取得時另附 `filesystem` 和 `source` |
 | `distribution` | 作業系統 `os`、發行版識別 `dis`、名稱、版本及核心版本 |
 | `host` | `hostname`、`fqdn`、DNS 網域 `domain`、執行環境 `type`、執行採集程式的系統帳號 `user` 及有效 `uid`、`gid` |
-| `network` | 首個 IPv4 預設路由的 `default_gateway` 與其介面的本機位址 `external_ip`、介面名稱與 MAC、IPv4 位址及數字前綴長度、全機可見的 IPv4 DNS 伺服器 |
+| `network` | 首個 IPv4 預設路由的 `default_gateway` 與其介面的本機位址 `external_ip`、介面名稱與 MAC、IPv4 位址及數字前綴長度、第一個合格的 IPv4 DNS 伺服器 `dns_server` |
 | `power[]` | 量測來源 `source` 與功率大小 `watt` |
 | `runtime` | 採集時的 UTC Unix 時間 `system_time`、開機經過的 `uptime`（皆以秒表示），以及主機的開機識別字串 `boot_id` |
 | `error[]` | 採集失敗的 `field`、原因 `message` 及適用時的裝置或介面 `subject` |
@@ -60,7 +60,7 @@ Apple Silicon 的 GPU 使用統一記憶體，`memory_kind` 為 `unified` 時的
 
 功率為電池充放電或感測器回報的功率大小，平台可依 `source` 判讀。Linux 可讀取 power supply 或 hwmon，macOS 與 Windows 讀取系統電池。沒有相應遙測時會記錄在 `error`。
 
-網路介面若有 IPv4 預設路由，只列出優先的預設路由介面，同一優先順序可能有多個介面。預設路由經由 VPN 或其他虛擬介面時仍會列出該介面。無預設路由時只列出啟用的實體介面，省略 `external_ip` 與 `default_gateway`。若預設路由是直連路由，也會省略 `default_gateway`。有同優先順序路由時，兩個欄位都採系統先列出的路由。介面的第一個 IPv4 位址可能是私有位址。Linux 的路由來源為核心 IPv4 主路由表；macOS 優先採用未限定介面的預設路由；Windows 依路由與介面的合計 metric 選擇。Linux 的 DNS 來自 `/etc/resolv.conf`，系統使用本機 stub resolver 時可看到 loopback 位址。macOS 沒有 DNS 完整主機名時可使用系統設定的 `.local` 名稱。
+網路介面若有 IPv4 預設路由，只列出優先的預設路由介面，同一優先順序可能有多個介面。預設路由經由 VPN 或其他虛擬介面時仍會列出該介面。無預設路由時只列出啟用的實體介面，省略 `external_ip` 與 `default_gateway`。若預設路由是直連路由，也會省略 `default_gateway`。有同優先順序路由時，兩個欄位都採系統先列出的路由。介面的第一個 IPv4 位址可能是私有位址。Linux 的路由來源為核心 IPv4 主路由表；macOS 優先採用未限定介面的預設路由；Windows 依路由與介面的合計 metric 選擇。Linux 的 DNS 來自 `/etc/resolv.conf`。各平台依系統列出的順序選取第一個非 loopback 的 IPv4 DNS 伺服器，以字串 `dns_server` 回報。整個 `127.0.0.0/8` 範圍（包含 systemd-resolved 的 `127.0.0.53`）會略過。沒有合格位址時省略欄位並記錄於 `error`。macOS 沒有 DNS 完整主機名時可使用系統設定的 `.local` 名稱。
 
 ## 採集備援
 

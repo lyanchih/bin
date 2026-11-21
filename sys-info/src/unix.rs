@@ -301,7 +301,7 @@ unsafe fn socket_mac(addr: *const libc::sockaddr) -> Option<String> {
     mac_address(unsafe { std::slice::from_raw_parts(addr.cast::<u8>().add(offset), count) })
 }
 
-pub fn dns_address(value: &str) -> Probe<Option<String>> {
+pub fn dns_address(value: &str) -> Probe<Option<Ipv4Addr>> {
     if let Some((address, zone)) = value.split_once('%')
         && !zone.is_empty()
         && !zone.contains('%')
@@ -312,7 +312,7 @@ pub fn dns_address(value: &str) -> Probe<Option<String>> {
     value
         .parse::<IpAddr>()
         .map(|address| match address {
-            IpAddr::V4(ip) => Some(ip.to_string()),
+            IpAddr::V4(ip) => Some(ip),
             IpAddr::V6(_) => None,
         })
         .map_err(|error| error.to_string())
@@ -320,7 +320,7 @@ pub fn dns_address(value: &str) -> Probe<Option<String>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{DefaultRoute, dns_address, include_interface, prefix_length};
+    use super::{DefaultRoute, Ipv4Addr, dns_address, include_interface, prefix_length};
     use std::collections::BTreeSet;
 
     #[test]
@@ -356,7 +356,10 @@ mod tests {
 
     #[test]
     fn dns_ignores_ipv6_addresses_and_reports_invalid_addresses() {
-        assert_eq!(dns_address("127.0.0.53"), Ok(Some("127.0.0.53".into())));
+        assert_eq!(
+            dns_address("127.0.0.53"),
+            Ok(Some(Ipv4Addr::new(127, 0, 0, 53)))
+        );
         assert_eq!(dns_address("2001:db8::53"), Ok(None));
         assert_eq!(dns_address("fe80::1%en0"), Ok(None));
         assert!(dns_address("invalid").is_err());

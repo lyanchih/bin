@@ -64,7 +64,7 @@ impl Report {
                 .map_err(|error| error.to_string()),
         );
         Self {
-            schema_version: 3,
+            schema_version: 4,
             cpu,
             gpu,
             ram,
@@ -310,8 +310,8 @@ pub struct Network {
     pub default_gateway: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub interfaces: Vec<Interface>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub dns_servers: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dns_server: Option<String>,
 }
 
 impl Network {
@@ -334,12 +334,12 @@ impl Network {
         self.external_ip.is_none()
             && self.default_gateway.is_none()
             && self.interfaces.is_empty()
-            && self.dns_servers.is_empty()
+            && self.dns_server.is_none()
     }
 
-    pub fn add_dns(&mut self, server: String) {
-        if !self.dns_servers.contains(&server) {
-            self.dns_servers.push(server);
+    pub fn consider_dns(&mut self, server: Ipv4Addr) {
+        if self.dns_server.is_none() && !server.is_loopback() {
+            self.dns_server = Some(server.to_string());
         }
     }
 
@@ -351,8 +351,12 @@ impl Network {
                 "no network interfaces available",
             );
         }
-        if self.dns_servers.is_empty() {
-            errors.add("network.dns_servers", None, "no IPv4 DNS servers available");
+        if self.dns_server.is_none() {
+            errors.add(
+                "network.dns_server",
+                None,
+                "no non-loopback IPv4 DNS servers available",
+            );
         }
         for interface in &self.interfaces {
             if interface.addresses.is_empty() {
@@ -503,5 +507,36 @@ mod disk_tests {
         assert!(eligible(true, 1_000_000_000));
         assert!(!eligible(false, 500_000_000_000));
         assert!(eligible(false, 500_000_000_001));
+    }
+}
+
+#[cfg(test)]
+mod network_tests {
+    use super::{Ipv4Addr, Network};
+
+    #[test]
+    fn dns_reports_only_the_first_non_loopback_ipv4_address() {
+        let mut network = Network::default();
+        for octets in [
+            [127, 0, 0, 0],
+            [127, 0, 0, 1],
+            [127, 0, 0, 53],
+            [127, 255, 255, 255],
+        ] {
+            network.consider_dns(Ipv4Addr::from(octets));
+        }
+        assert!(
+            serde_json::to_value(&network)
+                .unwrap()
+                .get("dns_server")
+                .is_none()
+        );
+        for octets in [[10, 0, 0, 53], [1, 1, 1, 1], [10, 0, 0, 53]] {
+            network.consider_dns(Ipv4Addr::from(octets));
+        }
+        assert_eq!(
+            serde_json::to_value(&network).unwrap(),
+            serde_json::json!({"dns_server": "10.0.0.53"})
+        );
     }
 }

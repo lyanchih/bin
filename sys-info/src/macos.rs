@@ -206,7 +206,7 @@ pub fn network(errors: &mut Errors) -> Network {
         ..Default::default()
     };
     if let Err(error) = collect_dns(&mut network, errors) {
-        errors.add("network.dns_servers", None, error);
+        errors.add("network.dns_server", None, error);
     }
     if let Some(route) = routes.first() {
         let ip = network
@@ -429,7 +429,7 @@ fn collect_dns(network: &mut Network, errors: &mut Errors) -> Probe<()> {
             .and_then(|value| value.downcast::<CFDictionary>())
         else {
             errors.add(
-                "network.dns_servers",
+                "network.dns_server",
                 None,
                 "invalid DNS configuration entry",
             );
@@ -450,9 +450,9 @@ fn collect_dns(network: &mut Network, errors: &mut Errors) -> Probe<()> {
                 .downcast::<CFString>()
                 .map(|value| unix::dns_address(&value.to_string()))
             {
-                Some(Ok(Some(server))) => network.add_dns(server),
+                Some(Ok(Some(server))) => network.consider_dns(server),
                 Some(Ok(None)) => {}
-                _ => errors.add("network.dns_servers", None, "invalid DNS server address"),
+                _ => errors.add("network.dns_server", None, "invalid DNS server address"),
             }
         }
     }
