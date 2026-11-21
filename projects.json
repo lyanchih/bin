@@ -97,6 +97,7 @@
       "sys-info -t json -p https://collector.example/inventory -p stdout"
     ],
     "sourceDir": "sys-info/",
+    "downloadAndRun": true,
     "binaries": [
       {
         "name": "sys-info",
@@ -115,6 +116,38 @@
         "downloadName": "sys-info-aarch64",
         "size": "2.9 MB",
         "note": "Linux ARM64 完全靜態執行檔 (Static)"
+      },
+      {
+        "name": "sys-info（macOS Intel）",
+        "arch": "Intel (x86_64)",
+        "target": "x86_64-apple-darwin",
+        "path": "bin/apple/sys-info",
+        "downloadName": "sys-info",
+        "note": "macOS 11 以上"
+      },
+      {
+        "name": "sys-info（Apple Silicon）",
+        "arch": "Apple Silicon (ARM64)",
+        "target": "aarch64-apple-darwin",
+        "path": "bin/apple/sys-info-aarch64",
+        "downloadName": "sys-info-aarch64",
+        "note": "macOS 11 以上"
+      },
+      {
+        "name": "sys-info.exe（Windows x64）",
+        "arch": "x86_64 (amd64)",
+        "target": "x86_64-pc-windows-msvc",
+        "path": "bin/windows/sys-info.exe",
+        "downloadName": "sys-info.exe",
+        "note": "Windows x64"
+      },
+      {
+        "name": "sys-info.exe（Windows ARM64）",
+        "arch": "ARM64 (aarch64)",
+        "target": "aarch64-pc-windows-msvc",
+        "path": "bin/windows/sys-info-aarch64.exe",
+        "downloadName": "sys-info-aarch64.exe",
+        "note": "Windows ARM64"
       }
     ]
   }

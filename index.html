@@ -473,9 +473,25 @@
         .replace(/"/g, "&quot;");
     }
 
-    function buildCurlCmd(binPath, downloadName) {
-      const url = new URL(binPath, window.location.href).href;
-      return `curl -fsSL "${url}" -o ${downloadName} && chmod +x ${downloadName}`;
+    function buildDownloadCommand(binary, run = false) {
+      const url = new URL(binary.path, window.location.href).href;
+      const name = binary.downloadName || binary.name;
+      if (binary.target.includes("-windows-")) {
+        const quote = (value) => "'" + value.replace(/'/g, "''") + "'";
+        const file = quote(".\\" + name);
+        const download = `Invoke-WebRequest -Uri ${quote(url)} -OutFile ${file} -ErrorAction Stop`;
+        return run ? `& { ${download}; & ${file} }` : download;
+      }
+      const quote = (value) => "'" + value.replace(/'/g, "'\\''") + "'";
+      const file = quote("./" + name);
+      const download = `curl -fsSL ${quote(url)} -o ${file} && chmod +x ${file}`;
+      return run ? `${download} && ${file}` : download;
+    }
+
+    function binaryPlatform(binary) {
+      if (binary.target.endsWith("-apple-darwin")) return "macOS";
+      if (binary.target.includes("-windows-")) return "Windows PowerShell";
+      return "Linux";
     }
 
     function renderProjects(filterText = "") {
@@ -507,8 +523,7 @@
           const binCount = (proj.binaries || []).length;
 
           const binsHtml = (proj.binaries || [])
-            .map((b, idx) => {
-              const btnId = `copy-${escapeHtml(proj.id)}-${idx}`;
+            .map((b) => {
               return `
                 <div class="bin-card">
                   <a class="bin-download-link" href="${escapeHtml(b.path)}" download="${escapeHtml(b.downloadName || b.name)}">
@@ -526,12 +541,9 @@
                     <button
                       type="button"
                       class="btn-copy"
-                      id="${btnId}"
-                      data-path="${escapeHtml(b.path)}"
-                      data-dl="${escapeHtml(b.downloadName || b.name)}"
-                      title="複製 curl 下載並賦予執行權限指令"
+                      data-command="${escapeHtml(buildDownloadCommand(b))}"
                     >
-                      複製 curl
+                      複製下載指令
                     </button>
                   </div>
                 </div>
@@ -556,6 +568,22 @@
                 <div class="code-block">${escapeHtml(proj.usage.join("\n"))}</div>
               `
               : "";
+
+          const commandsHtml = proj.downloadAndRun && binCount
+            ? `
+                <div class="section-label">指令使用範例</div>
+                ${proj.binaries.map((binary) => {
+                  const command = escapeHtml(buildDownloadCommand(binary, true));
+                  return `
+                    <div class="bin-top">
+                      <span>${escapeHtml(binaryPlatform(binary))} · ${escapeHtml(binary.arch)}</span>
+                      <button type="button" class="btn-copy" data-command="${command}">複製指令</button>
+                    </div>
+                    <pre class="code-block"><code>${command}</code></pre>
+                  `;
+                }).join("")}
+              `
+            : "";
 
           return `
             <section class="project-card ${isOpen ? "active" : ""}" data-id="${escapeHtml(proj.id)}">
@@ -584,6 +612,7 @@
                 </div>
                 ${descHtml}
                 ${usageHtml}
+                ${commandsHtml}
               </div>
             </section>
           `;
@@ -605,9 +634,7 @@
       container.querySelectorAll(".btn-copy").forEach((btn) => {
         btn.addEventListener("click", async (e) => {
           e.stopPropagation();
-          const path = btn.getAttribute("data-path");
-          const dl = btn.getAttribute("data-dl");
-          const cmd = buildCurlCmd(path, dl);
+          const cmd = btn.getAttribute("data-command");
           try {
             await navigator.clipboard.writeText(cmd);
             const orig = btn.textContent;

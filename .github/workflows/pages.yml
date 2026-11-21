@@ -16,7 +16,61 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  build-sys-info:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            platform: apple
+            binary: sys-info
+            filename: sys-info
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            platform: apple
+            binary: sys-info
+            filename: sys-info-aarch64
+          - runner: windows-2025
+            target: x86_64-pc-windows-msvc
+            platform: windows
+            binary: sys-info.exe
+            filename: sys-info.exe
+          - runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            platform: windows
+            binary: sys-info.exe
+            filename: sys-info-aarch64.exe
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test sys-info
+        working-directory: sys-info
+        shell: bash
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
+          RUST_TARGET: ${{ matrix.target }}
+        run: |
+          rustup target add "$RUST_TARGET"
+          cargo test --locked --target "$RUST_TARGET"
+          cargo build --locked --release --target "$RUST_TARGET"
+      - name: Stage executable
+        shell: bash
+        env:
+          RUST_TARGET: ${{ matrix.target }}
+          BINARY: ${{ matrix.binary }}
+          FILENAME: ${{ matrix.filename }}
+        run: |
+          mkdir -p dist
+          cp "sys-info/target/$RUST_TARGET/release/$BINARY" "dist/$FILENAME"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sys-info-${{ matrix.platform }}-${{ matrix.target }}
+          path: dist/${{ matrix.filename }}
+          if-no-files-found: error
+
   deploy:
+    needs: build-sys-info
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -27,6 +81,20 @@ jobs:
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
+
+      - name: Add macOS downloads
+        uses: actions/download-artifact@v4
+        with:
+          pattern: sys-info-apple-*
+          path: bin/apple
+          merge-multiple: true
+
+      - name: Add Windows downloads
+        uses: actions/download-artifact@v4
+        with:
+          pattern: sys-info-windows-*
+          path: bin/windows
+          merge-multiple: true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
