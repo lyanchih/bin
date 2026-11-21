@@ -137,7 +137,7 @@
         "name": "sys-info.exe（Windows x64）",
         "arch": "x86_64 (amd64)",
         "target": "x86_64-pc-windows-msvc",
-        "path": "bin/windows/sys-info.exe",
+        "path": "bin/windows/sys-info.exe?v=0.1.0",
         "downloadName": "sys-info.exe",
         "note": "Windows x64"
       },
@@ -145,7 +145,7 @@
         "name": "sys-info.exe（Windows ARM64）",
         "arch": "ARM64 (aarch64)",
         "target": "aarch64-pc-windows-msvc",
-        "path": "bin/windows/sys-info-aarch64.exe",
+        "path": "bin/windows/sys-info-aarch64.exe?v=0.1.0",
         "downloadName": "sys-info-aarch64.exe",
         "note": "Windows ARM64"
       }
