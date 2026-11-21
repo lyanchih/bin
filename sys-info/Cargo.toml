@@ -1,0 +1,59 @@
+[package]
+name = "sys-info"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Cross-platform host inventory in JSON or CBOR"
+
+[dependencies]
+base64 = "0.23"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ciborium = "0.2"
+coap = { version = "0.29", default-features = false }
+coap-lite = "0.13.3"
+flate2 = "1"
+getrandom = "0.3"
+percent-encoding = "2.3"
+rumqttc = { version = "0.25.1", default-features = false }
+sysinfo = { version = "0.38", default-features = false, features = ["system"] }
+tokio = { version = "1", features = ["net", "rt", "time"] }
+ureq = { version = "3.5", default-features = false, features = ["rustls"] }
+url = "2.5"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(any(all(target_os = "linux", target_env = "gnu"), target_os = "macos", target_os = "windows"))'.dependencies]
+libloading = "0.8"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSEnumerator", "NSString"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62", features = ["Win32_Graphics_Dxgi_Common"] }
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Devices_DeviceAndDriverInstallation",
+    "Win32_Devices_Properties",
+    "Win32_Security",
+    "Win32_System_IO",
+    "Win32_System_Ioctl",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_Ndis",
+    "Win32_NetworkManagement_WNet",
+    "Win32_Networking_WinSock",
+    "Win32_System_Power",
+    "Win32_System_Registry",
+    "Win32_Storage_FileSystem",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+    "Win32_System_WindowsProgramming",
+] }
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

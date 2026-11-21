@@ -78,5 +78,44 @@
         "note": "Linux ARM64 完全靜態執行檔 (Static)"
       }
     ]
+  },
+  {
+    "id": "sys-info",
+    "name": "sys-info",
+    "title": "跨平台主機資訊採集工具",
+    "language": "Rust",
+    "tags": ["Rust", "musl-static", "JSON", "CBOR", "CoAP", "MQTT"],
+    "summary": "採集主機的硬體、作業系統和網路資訊，適用於設備與伺服器管理。",
+    "description": [
+      "支援 Linux、macOS 和 Windows 的 x86_64 與 ARM64，包含 Apple Silicon。",
+      "回報 CPU、GPU、記憶體、磁碟、網路、開機時間及可取得的功率資訊，採集錯誤隨報告輸出。",
+      "支援 JSON 和 CBOR，可選用 gzip，依序交付到 stdout、HTTP／HTTPS、CoAP 或 MQTT。"
+    ],
+    "usage": [
+      "sys-info",
+      "sys-info -t cbor-gzip > host.cbor.gz",
+      "sys-info -t json -p https://collector.example/inventory -p stdout"
+    ],
+    "sourceDir": "sys-info/",
+    "binaries": [
+      {
+        "name": "sys-info",
+        "arch": "x86_64 (amd64)",
+        "target": "x86_64-unknown-linux-musl",
+        "path": "bin/sys-info",
+        "downloadName": "sys-info",
+        "size": "3.5 MB",
+        "note": "Linux x86_64 完全靜態執行檔 (Static-PIE)"
+      },
+      {
+        "name": "sys-info-aarch64",
+        "arch": "ARM64 (aarch64)",
+        "target": "aarch64-unknown-linux-musl",
+        "path": "bin/sys-info-aarch64",
+        "downloadName": "sys-info-aarch64",
+        "size": "2.9 MB",
+        "note": "Linux ARM64 完全靜態執行檔 (Static)"
+      }
+    ]
   }
 ]
