@@ -8,6 +8,8 @@ pub enum LibraryId {
     Metal,
     #[cfg(target_os = "windows")]
     Dxgi,
+    #[cfg(target_os = "windows")]
+    Cuda,
 }
 
 impl LibraryId {
@@ -19,6 +21,8 @@ impl LibraryId {
             Self::Metal => "Metal",
             #[cfg(target_os = "windows")]
             Self::Dxgi => "DXGI",
+            #[cfg(target_os = "windows")]
+            Self::Cuda => "CUDA",
         }
     }
 }
@@ -51,6 +55,8 @@ fn candidates(os: &str, arch: &str, library: LibraryId) -> &'static [&'static st
         }
         #[cfg(target_os = "windows")]
         ("windows", "x86_64" | "aarch64", LibraryId::Dxgi) => &["dxgi.dll"],
+        #[cfg(target_os = "windows")]
+        ("windows", "x86_64" | "aarch64", LibraryId::Cuda) => &["nvcuda.dll"],
         _ => &[],
     }
 }

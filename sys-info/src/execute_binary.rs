@@ -8,12 +8,15 @@ use std::time::{Duration, Instant};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Query {
     GpuSize,
+    GpuComputeCapability,
+    TimeSource,
+    LibcVersion,
 }
 
 struct Rule {
     field: Query,
     os: &'static str,
-    arch: &'static str,
+    architectures: &'static [&'static str],
     paths: &'static [&'static str],
     args: &'static [&'static str],
 }
@@ -22,12 +25,13 @@ const NVIDIA_QUERY: &[&str] = &[
     "--query-gpu=pci.bus_id,memory.total",
     "--format=csv,noheader,nounits",
 ];
+const ARCHITECTURES: &[&str] = &["x86_64", "aarch64"];
 
 const RULES: &[Rule] = &[
     Rule {
         field: Query::GpuSize,
         os: "linux",
-        arch: "x86_64",
+        architectures: &["x86_64"],
         paths: &[
             "/usr/bin/nvidia-smi",
             "/usr/local/nvidia/bin/nvidia-smi",
@@ -38,9 +42,37 @@ const RULES: &[Rule] = &[
     Rule {
         field: Query::GpuSize,
         os: "linux",
-        arch: "aarch64",
+        architectures: &["aarch64"],
         paths: &["/usr/bin/nvidia-smi", "/usr/local/nvidia/bin/nvidia-smi"],
         args: NVIDIA_QUERY,
+    },
+    Rule {
+        field: Query::GpuComputeCapability,
+        os: "linux",
+        architectures: ARCHITECTURES,
+        paths: &[
+            "/usr/bin/nvidia-smi",
+            "/usr/local/nvidia/bin/nvidia-smi",
+            "/usr/lib/wsl/lib/nvidia-smi",
+        ],
+        args: &[
+            "--query-gpu=pci.bus_id,compute_cap",
+            "--format=csv,noheader,nounits",
+        ],
+    },
+    Rule {
+        field: Query::TimeSource,
+        os: "linux",
+        architectures: ARCHITECTURES,
+        paths: &["/usr/bin/timedatectl", "/bin/timedatectl"],
+        args: &["show-timesync", "--property=ServerName", "--value"],
+    },
+    Rule {
+        field: Query::LibcVersion,
+        os: "linux",
+        architectures: ARCHITECTURES,
+        paths: &["/usr/bin/ldd", "/bin/ldd"],
+        args: &["--version"],
     },
 ];
 
@@ -50,7 +82,7 @@ const OUTPUT_LIMIT: usize = 64 * 1024;
 fn rule(field: Query, os: &str, arch: &str) -> Option<&'static Rule> {
     RULES
         .iter()
-        .find(|rule| rule.field == field && rule.os == os && rule.arch == arch)
+        .find(|rule| rule.field == field && rule.os == os && rule.architectures.contains(&arch))
 }
 
 /// Returns None when there is no command for this field and target.
@@ -72,7 +104,7 @@ fn run(rule: &Rule) -> Probe<String> {
             .spawn();
         match child {
             Ok(mut child) => {
-                let result = capture(&mut child, TIMEOUT);
+                let result = capture(&mut child, TIMEOUT, rule.field);
                 if result.is_err() {
                     stop_child(child);
                 }
@@ -87,7 +119,7 @@ fn run(rule: &Rule) -> Probe<String> {
     ))
 }
 
-fn capture(child: &mut Child, timeout: Duration) -> Probe<String> {
+fn capture(child: &mut Child, timeout: Duration, field: Query) -> Probe<String> {
     let mut stdout = Capture::new(child.stdout.take().ok_or("stdout pipe unavailable")?)?;
     let mut stderr = Capture::new(child.stderr.take().ok_or("stderr pipe unavailable")?)?;
     let start = Instant::now();
@@ -100,7 +132,17 @@ fn capture(child: &mut Child, timeout: Duration) -> Probe<String> {
             && stderr.closed
         {
             if status.success() {
+                if field == Query::LibcVersion && stdout.bytes.is_empty() {
+                    return String::from_utf8(stderr.bytes).map_err(|error| error.to_string());
+                }
                 return String::from_utf8(stdout.bytes).map_err(|error| error.to_string());
+            }
+            // musl's ldd mode writes the version banner to stderr and exits with usage status.
+            if field == Query::LibcVersion
+                && status.code() == Some(1)
+                && stderr.bytes.starts_with(b"musl libc (")
+            {
+                return String::from_utf8(stderr.bytes).map_err(|error| error.to_string());
             }
             let detail = [stderr.bytes, stdout.bytes].into_iter().find_map(|bytes| {
                 let text = String::from_utf8_lossy(&bytes);
@@ -225,7 +267,7 @@ mod tests {
             ("failure", Duration::from_secs(2), "GPU query failed"),
         ] {
             let mut child = fixture(mode);
-            let result = capture(&mut child, timeout);
+            let result = capture(&mut child, timeout, Query::GpuSize);
             stop_child(child);
             let error = result.expect_err("fixture must fail");
             assert!(error.contains(expected), "{mode}: {error}");
@@ -233,7 +275,7 @@ mod tests {
     }
 
     #[test]
-    fn only_the_gpu_size_query_on_supported_linux_targets_is_allowlisted() {
+    fn gpu_size_query_is_allowlisted_on_supported_linux_targets() {
         for arch in ["x86_64", "aarch64"] {
             let rule = rule(Query::GpuSize, "linux", arch).expect("known target");
             assert!(rule.paths.iter().all(|path| path.starts_with('/')));

@@ -6,6 +6,7 @@ mod hardware;
 mod host_type;
 mod model;
 mod mount;
+mod runtime;
 
 #[cfg(unix)]
 mod unix;

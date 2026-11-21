@@ -77,6 +77,7 @@ pub fn collect(errors: &mut Errors) -> (Cpu, Ram) {
             (count > 0).then_some(count),
             "logical CPU count unavailable",
         ),
+        features: cpu_features(),
     };
     let ram = Ram {
         total: errors.require(
@@ -87,6 +88,50 @@ pub fn collect(errors: &mut Errors) -> (Cpu, Ram) {
         ),
     };
     (cpu, ram)
+}
+
+fn cpu_features() -> Vec<&'static str> {
+    #[cfg(target_arch = "x86_64")]
+    let features = [
+        ("sse2", std::is_x86_feature_detected!("sse2")),
+        ("sse4.1", std::is_x86_feature_detected!("sse4.1")),
+        ("avx", std::is_x86_feature_detected!("avx")),
+        ("avx2", std::is_x86_feature_detected!("avx2")),
+        ("f16c", std::is_x86_feature_detected!("f16c")),
+        ("fma", std::is_x86_feature_detected!("fma")),
+        ("avx512f", std::is_x86_feature_detected!("avx512f")),
+        ("avx512vl", std::is_x86_feature_detected!("avx512vl")),
+        ("avx512bw", std::is_x86_feature_detected!("avx512bw")),
+        ("avx512bf16", std::is_x86_feature_detected!("avx512bf16")),
+        ("avx512fp16", std::is_x86_feature_detected!("avx512fp16")),
+        ("avx512vnni", std::is_x86_feature_detected!("avx512vnni")),
+    ];
+    #[cfg(target_arch = "aarch64")]
+    let features = [
+        ("neon", std::arch::is_aarch64_feature_detected!("neon")),
+        ("fp16", std::arch::is_aarch64_feature_detected!("fp16")),
+        (
+            "dotprod",
+            std::arch::is_aarch64_feature_detected!("dotprod"),
+        ),
+        ("sve", std::arch::is_aarch64_feature_detected!("sve")),
+        ("sve2", std::arch::is_aarch64_feature_detected!("sve2")),
+        ("bf16", std::arch::is_aarch64_feature_detected!("bf16")),
+        ("i8mm", std::arch::is_aarch64_feature_detected!("i8mm")),
+    ];
+    features
+        .into_iter()
+        .filter_map(|(name, supported)| supported.then_some(name))
+        .collect()
+}
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub fn compute_capability(major: i32, minor: i32) -> crate::model::Probe<String> {
+    if major > 0 && minor >= 0 {
+        Ok(format!("{major}.{minor}"))
+    } else {
+        Err("invalid CUDA compute capability".into())
+    }
 }
 
 fn base_frequency(models: Option<&str>) -> Option<u64> {
@@ -263,6 +308,8 @@ pub fn distribution(
 ) -> Distribution {
     Distribution {
         os,
+        libc: None,
+        libc_version: None,
         dis: errors.require(
             "distribution.dis",
             None,

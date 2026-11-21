@@ -117,7 +117,7 @@ pub fn distribution(errors: &mut Errors) -> Distribution {
             Some((key, release_value(value)?))
         })
         .collect::<BTreeMap<_, _>>();
-    hardware::distribution(
+    let mut distribution = hardware::distribution(
         "linux",
         values.get("ID").cloned(),
         values.get("NAME").cloned(),
@@ -126,7 +126,68 @@ pub fn distribution(errors: &mut Errors) -> Distribution {
             .or_else(|| values.get("VERSION"))
             .cloned(),
         errors,
-    )
+    );
+    if let Some((kind, version)) = errors.record("distribution.libc", None, system_libc()) {
+        distribution.libc = Some(kind);
+        distribution.libc_version = errors.require(
+            "distribution.libc_version",
+            None,
+            version,
+            "system libc version unavailable",
+        );
+    } else {
+        errors.add(
+            "distribution.libc_version",
+            None,
+            "system libc could not be identified",
+        );
+    }
+    distribution
+}
+
+fn system_libc() -> Probe<(&'static str, Option<String>)> {
+    use crate::execute_binary::{Query, execute};
+
+    let output =
+        execute(Query::LibcVersion).ok_or("no system libc query for this architecture")??;
+    parse_system_libc(&output)
+}
+
+fn parse_system_libc(output: &str) -> Probe<(&'static str, Option<String>)> {
+    let first = output.lines().next().unwrap_or_default();
+    let (kind, version) = if first.starts_with("musl libc (") {
+        (
+            "musl",
+            output
+                .lines()
+                .find_map(|line| line.strip_prefix("Version ")),
+        )
+    } else if first.starts_with("ldd (")
+        && [
+            "glibc",
+            "GNU libc",
+            "GNU C Library",
+            "GNU libc6",
+            "Debian",
+            "Ubuntu",
+            "GLIBC",
+        ]
+        .iter()
+        .any(|label| first.contains(label))
+    {
+        ("glibc", first.split_whitespace().last())
+    } else {
+        return Err("could not recognize the system libc from ldd".into());
+    };
+    let version = version
+        .filter(|value| {
+            value.contains('.')
+                && value
+                    .split('.')
+                    .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+        })
+        .map(str::to_owned);
+    Ok((kind, version))
 }
 
 fn release_value(value: &str) -> Option<String> {
@@ -718,6 +779,23 @@ pub fn gpu(errors: &mut Errors, _ram_bytes: Option<u64>) -> Vec<Gpu> {
                 .and_then(|id| u32::from_str_radix(id.strip_prefix("0x")?, 16).ok());
             let band = hardware::gpu_band(vendor_id, model.as_deref())
                 .or_else(|| pci_vendor(pci_ids.as_deref()?, vendor.as_deref()?));
+            let compute_capability = if vendor_id == Some(0x10de) {
+                let capability = dynamic.compute_capability.or_else(|| {
+                    if driver.as_deref() == Some("nvidia") {
+                        api.binary_compute(&id, errors)
+                    } else {
+                        None
+                    }
+                });
+                errors.require(
+                    "gpu.compute_capability",
+                    Some(&id),
+                    capability,
+                    "CUDA compute capability unavailable",
+                )
+            } else {
+                None
+            };
             Gpu {
                 band: errors.require("gpu.band", Some(&id), band, "GPU manufacturer unavailable"),
                 model: errors.require(
@@ -743,6 +821,7 @@ pub fn gpu(errors: &mut Errors, _ram_bytes: Option<u64>) -> Vec<Gpu> {
                 size: size_bytes,
                 memory_kind: size_bytes.map(|_| "dedicated"),
                 shared_limit: None,
+                compute_capability,
                 id,
             }
         })
@@ -932,7 +1011,7 @@ fn directory(path: &str, field: &'static str, errors: &mut Errors) -> Vec<PathBu
 
 #[cfg(test)]
 mod tests {
-    use super::{network_mounts, parse_routes};
+    use super::{network_mounts, parse_routes, parse_system_libc};
     use crate::model::Errors;
 
     #[test]
@@ -989,5 +1068,18 @@ mod tests {
                 .is_empty()
         );
         assert!(parse_routes("Iface\nen0").is_err());
+    }
+    #[test]
+    fn recognizes_glibc_and_musl_from_system_version_output() {
+        assert_eq!(
+            parse_system_libc("ldd (Ubuntu GLIBC 2.39-0ubuntu8.7) 2.39\n").unwrap(),
+            ("glibc", Some("2.39".into()))
+        );
+        assert_eq!(
+            parse_system_libc("musl libc (aarch64)\nVersion 1.2.5\nDynamic Program Loader\n")
+                .unwrap(),
+            ("musl", Some("1.2.5".into()))
+        );
+        assert!(parse_system_libc("BusyBox ldd\n").is_err());
     }
 }

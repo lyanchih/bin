@@ -794,6 +794,7 @@ fn registry_gpu(
         .or_else(|| kext_bundle_version(driver.as_deref()?));
     let band = hardware::gpu_band(None, model.as_deref());
     Gpu {
+        compute_capability: None,
         band: errors.require("gpu.band", Some(&id), band, "GPU manufacturer unavailable"),
         model: errors.require(
             "gpu.type",

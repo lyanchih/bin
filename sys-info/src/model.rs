@@ -1,4 +1,4 @@
-use crate::{hardware, host_type, mount::NetworkMount, platform};
+use crate::{hardware, host_type, mount::NetworkMount, platform, runtime};
 use serde::Serialize;
 use std::fmt::Write as _;
 use std::net::Ipv4Addr;
@@ -46,6 +46,15 @@ impl Report {
         let power = platform::power(&mut errors);
         let uptime = errors.record("runtime.uptime", None, platform::uptime());
         let boot_id = errors.record("runtime.boot_id", None, platform::boot_id());
+        let (time_source, last_sync) = runtime::time_sync(&mut errors);
+        #[cfg(unix)]
+        let open_files_limit = errors
+            .record(
+                "runtime.open_files_limit",
+                None,
+                runtime::open_files_limit(),
+            )
+            .flatten();
         let system_time = errors.record(
             "runtime.system_time",
             None,
@@ -69,6 +78,10 @@ impl Report {
                 system_time,
                 uptime,
                 boot_id,
+                time_source,
+                last_sync,
+                #[cfg(unix)]
+                open_files_limit,
             },
             error: errors.0,
         }
@@ -83,11 +96,26 @@ struct Runtime {
     uptime: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     boot_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    time_source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_sync: Option<u64>,
+    #[cfg(unix)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    open_files_limit: Option<libc::rlim_t>,
 }
 
 impl Runtime {
     fn is_empty(&self) -> bool {
-        self.system_time.is_none() && self.uptime.is_none() && self.boot_id.is_none()
+        #[cfg(unix)]
+        if self.open_files_limit.is_some() {
+            return false;
+        }
+        self.system_time.is_none()
+            && self.uptime.is_none()
+            && self.boot_id.is_none()
+            && self.time_source.is_none()
+            && self.last_sync.is_none()
     }
 }
 
@@ -104,6 +132,8 @@ pub struct Cpu {
     pub arch: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub count: Option<usize>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub features: Vec<&'static str>,
 }
 
 impl Cpu {
@@ -113,6 +143,7 @@ impl Cpu {
             && self.frequency.is_none()
             && self.arch.is_none()
             && self.count.is_none()
+            && self.features.is_empty()
     }
 }
 
@@ -148,6 +179,8 @@ pub struct Gpu {
     pub memory_kind: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shared_limit: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compute_capability: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -233,6 +266,10 @@ pub struct Distribution {
     pub version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kernel_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub libc: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub libc_version: Option<String>,
 }
 
 #[derive(Serialize)]

@@ -19,6 +19,7 @@ pub struct GpuApi {
     #[cfg(target_env = "gnu")]
     nvml: OnceCell<Probe<Nvml>>,
     binary_memory: OnceCell<Option<Probe<NvidiaMemory>>>,
+    binary_compute: OnceCell<Option<Probe<NvidiaCapabilities>>>,
 }
 
 #[derive(Default)]
@@ -26,6 +27,7 @@ pub struct NvidiaDetails {
     pub model: Option<String>,
     pub version: Option<String>,
     pub memory: Option<u64>,
+    pub compute_capability: Option<String>,
 }
 
 impl GpuApi {
@@ -44,6 +46,11 @@ impl GpuApi {
                 model: errors.record("gpu.library", Some(pci_address), library.name(device)),
                 version: errors.record("gpu.library", Some(pci_address), library.driver_version()),
                 memory: errors.record("gpu.library", Some(pci_address), library.memory(device)),
+                compute_capability: errors.record(
+                    "gpu.library",
+                    Some(pci_address),
+                    library.compute_capability(device),
+                ),
             }
         }
         #[cfg(not(target_env = "gnu"))]
@@ -55,6 +62,36 @@ impl GpuApi {
             );
             NvidiaDetails::default()
         }
+    }
+
+    pub fn binary_compute(&self, pci_address: &str, errors: &mut Errors) -> Option<String> {
+        let values = self.binary_compute.get_or_init(|| {
+            execute_binary::execute(Query::GpuComputeCapability).map(|output| {
+                output.and_then(|output| {
+                    parse_nvidia_csv(&output, |value| {
+                        let (major, minor) = value.trim().split_once('.')?;
+                        crate::hardware::compute_capability(
+                            major.parse().ok()?,
+                            minor.parse().ok()?,
+                        )
+                        .ok()
+                    })
+                })
+            })
+        });
+        let result = values
+            .as_ref()?
+            .as_ref()
+            .map_err(Clone::clone)
+            .and_then(|values| {
+                let pci = parse_pci_address(pci_address)
+                    .ok_or_else(|| format!("invalid GPU PCI address {pci_address}"))?;
+                values
+                    .get(&pci)
+                    .cloned()
+                    .ok_or_else(|| format!("nvidia-smi did not report PCI device {pci_address}"))?
+            });
+        errors.record("gpu.binary", Some(pci_address), result)
     }
 
     pub fn binary_memory(&self, pci_address: &str, errors: &mut Errors) -> Option<u64> {
@@ -94,6 +131,7 @@ struct PciAddress {
 }
 
 type NvidiaMemory = BTreeMap<PciAddress, Probe<u64>>;
+type NvidiaCapabilities = BTreeMap<PciAddress, Probe<String>>;
 
 fn parse_pci_address(address: &str) -> Option<PciAddress> {
     let (domain, rest) = address.trim().split_once(':')?;
@@ -109,6 +147,20 @@ fn parse_pci_address(address: &str) -> Option<PciAddress> {
 }
 
 fn parse_nvidia_memory(output: &str) -> Probe<NvidiaMemory> {
+    parse_nvidia_csv(output, |value| {
+        value
+            .trim()
+            .parse::<u64>()
+            .ok()
+            .filter(|&mib| mib > 0)
+            .and_then(|mib| mib.checked_mul(1024 * 1024))
+    })
+}
+
+fn parse_nvidia_csv<T: PartialEq>(
+    output: &str,
+    parse_value: impl Fn(&str) -> Option<T>,
+) -> Probe<BTreeMap<PciAddress, Probe<T>>> {
     use std::collections::btree_map::Entry;
 
     let mut memory = BTreeMap::new();
@@ -119,25 +171,15 @@ fn parse_nvidia_memory(output: &str) -> Probe<NvidiaMemory> {
         let Some(address) = parse_pci_address(pci) else {
             continue;
         };
-        let size = value
-            .trim()
-            .parse::<u64>()
-            .ok()
-            .filter(|&mib| mib > 0)
-            .and_then(|mib| mib.checked_mul(1024 * 1024))
-            .ok_or_else(|| {
-                format!(
-                    "nvidia-smi did not return a valid memory size for {}",
-                    pci.trim()
-                )
-            });
+        let size = parse_value(value)
+            .ok_or_else(|| format!("nvidia-smi did not return a valid value for {}", pci.trim()));
         match memory.entry(address) {
             Entry::Vacant(entry) => {
                 entry.insert(size);
             }
             Entry::Occupied(mut entry) if entry.get() != &size => {
                 *entry.get_mut() = Err(format!(
-                    "nvidia-smi returned conflicting memory sizes for {}",
+                    "nvidia-smi returned conflicting values for {}",
                     pci.trim()
                 ));
             }
@@ -228,6 +270,20 @@ impl Nvml {
         let mut memory = Memory::default();
         nvml_status(unsafe { query(device, &mut memory) }, "GPU memory size")?;
         positive_memory(memory.total).map_err(|error| format!("NVML: {error}"))
+    }
+
+    fn compute_capability(&self, device: Device) -> Probe<String> {
+        type Query = unsafe extern "C" fn(Device, *mut i32, *mut i32) -> c_uint;
+        let query = unsafe {
+            self.library
+                .symbol::<Query>(c"nvmlDeviceGetCudaComputeCapability")
+        }?;
+        let (mut major, mut minor) = (0, 0);
+        nvml_status(
+            unsafe { query(device, &mut major, &mut minor) },
+            "GPU compute capability",
+        )?;
+        crate::hardware::compute_capability(major, minor)
     }
 }
 

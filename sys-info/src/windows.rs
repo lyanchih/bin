@@ -834,6 +834,7 @@ fn dxgi_gpus(errors: &mut Errors) -> Probe<Vec<Gpu>> {
     // The factory and adapters must release their COM handles before unloading DXGI.
     let factory = unsafe { IDXGIFactory1::from_raw(factory) };
     let mut gpus = Vec::new();
+    let cuda = std::cell::OnceCell::new();
     for index in 0.. {
         let adapter = match unsafe { factory.EnumAdapters1(index) } {
             Ok(adapter) => adapter,
@@ -892,7 +893,23 @@ fn dxgi_gpus(errors: &mut Errors) -> Probe<Vec<Gpu>> {
             (None, None)
         };
         let band = hardware::gpu_band(Some(desc.VendorId), model.as_deref());
+        let compute_capability = if desc.VendorId == 0x10de {
+            let result = cuda
+                .get_or_init(cuda_capabilities)
+                .as_ref()
+                .map_err(Clone::clone)
+                .and_then(|values| {
+                    values
+                        .get(&id)
+                        .cloned()
+                        .ok_or_else(|| "no CUDA device matches this DXGI adapter".to_owned())?
+                });
+            errors.record("gpu.compute_capability", Some(&id), result)
+        } else {
+            None
+        };
         gpus.push(Gpu {
+            compute_capability,
             band: errors.require("gpu.band", Some(&id), band, "GPU manufacturer unavailable"),
             model: errors.require(
                 "gpu.type",
@@ -916,6 +933,69 @@ fn dxgi_gpus(errors: &mut Errors) -> Probe<Vec<Gpu>> {
         });
     }
     Ok(gpus)
+}
+
+fn cuda_capabilities() -> Probe<std::collections::BTreeMap<String, Probe<String>>> {
+    type Init = unsafe extern "system" fn(u32) -> i32;
+    type Count = unsafe extern "system" fn(*mut i32) -> i32;
+    type Get = unsafe extern "system" fn(*mut i32, i32) -> i32;
+    type Luid = unsafe extern "system" fn(*mut u8, *mut u32, i32) -> i32;
+    type Attribute = unsafe extern "system" fn(*mut i32, i32, i32) -> i32;
+    const CAPABILITY_MAJOR: i32 = 75;
+    const CAPABILITY_MINOR: i32 = 76;
+
+    let status = |code, operation| -> Probe<()> {
+        if code == 0 {
+            Ok(())
+        } else {
+            Err(format!("CUDA {operation} failed with status {code}"))
+        }
+    };
+    let library = DynamicLibrary::load(LibraryId::Cuda)?;
+    // The signatures and attribute constants follow the CUDA Driver API.
+    let init = unsafe { library.symbol::<Init>(c"cuInit") }?;
+    let count = unsafe { library.symbol::<Count>(c"cuDeviceGetCount") }?;
+    let get = unsafe { library.symbol::<Get>(c"cuDeviceGet") }?;
+    let luid = unsafe { library.symbol::<Luid>(c"cuDeviceGetLuid") }?;
+    let attribute = unsafe { library.symbol::<Attribute>(c"cuDeviceGetAttribute") }?;
+    status(unsafe { init(0) }, "initialization")?;
+    let mut device_count = 0;
+    status(unsafe { count(&mut device_count) }, "device count")?;
+
+    let mut values = std::collections::BTreeMap::new();
+    for ordinal in 0..device_count {
+        let mut device = 0;
+        let mut identifier = [0; 8];
+        let mut node_mask = 0;
+        if unsafe { get(&mut device, ordinal) } != 0
+            || unsafe { luid(identifier.as_mut_ptr(), &mut node_mask, device) } != 0
+        {
+            continue;
+        }
+        let id = format!("dxgi:{:016x}", u64::from_le_bytes(identifier));
+        let query = |key| -> Probe<i32> {
+            let mut value = 0;
+            status(
+                unsafe { attribute(&mut value, key, device) },
+                "device attribute",
+            )?;
+            Ok(value)
+        };
+        let value = query(CAPABILITY_MAJOR)
+            .and_then(|major| hardware::compute_capability(major, query(CAPABILITY_MINOR)?));
+        values
+            .entry(id)
+            .and_modify(|previous| {
+                if previous != &value {
+                    *previous = Err(
+                        "CUDA devices matched one DXGI adapter with conflicting capabilities"
+                            .into(),
+                    );
+                }
+            })
+            .or_insert(value);
+    }
+    Ok(values)
 }
 
 struct DisplayDevices {
@@ -1016,6 +1096,13 @@ fn setupapi_gpus(errors: &mut Errors) -> Probe<Vec<Gpu>> {
         let model = display_property(devices.handle, device, SPDRP_DEVICEDESC);
         let (pci_vendor, pci_id) = display_pci_id(devices.handle, device);
         let band = hardware::gpu_band(pci_vendor, model.as_deref().ok());
+        if pci_vendor == Some(0x10de) {
+            errors.add(
+                "gpu.compute_capability",
+                Some(&id),
+                "no DXGI adapter identifier for CUDA device matching",
+            );
+        }
         let version = display_driver_version(devices.handle, device);
         errors.add(
             "gpu.size",
@@ -1023,6 +1110,7 @@ fn setupapi_gpus(errors: &mut Errors) -> Probe<Vec<Gpu>> {
             "Windows display device inventory does not expose GPU memory capacity",
         );
         gpus.push(Gpu {
+            compute_capability: None,
             band: errors.require("gpu.band", Some(&id), band, "GPU manufacturer unavailable"),
             model: errors.record(
                 "gpu.type",

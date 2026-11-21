@@ -75,6 +75,20 @@ Apple Silicon 的 GPU 使用統一記憶體，`memory_kind` 為 `unified` 時的
 
 Linux NVIDIA GPU 只有在 NVML 無法提供容量時才呼叫 `nvidia-smi`。每次採集最多查詢一次，依 PCI 位址配對 GPU，並將 MiB 轉成 bytes。執行器直接啟動白名單路徑，限制執行時間為 5 秒，每個輸出串流最多 64 KiB。動態載入與執行檔的失敗各自記錄於 `gpu.library` 和 `gpu.binary`，底層若能補到資料仍會輸出。musl 主程式維持靜態連結，使用此備援的主機需裝有可執行的 `nvidia-smi`。
 
+## 運算能力與執行環境
+
+| 欄位 | 定義 |
+| --- | --- |
+| `runtime.time_source` | 目前選用的 NTP 目標，只回報一個主機名稱或 IP。僅有候選伺服器清單時省略。 |
+| `runtime.last_sync` | 距離上一次成功同步的經過時間，以非負整數秒表示，採整秒截尾。優先讀取作業系統或時間服務 API 提供的經過時間。若 API 只提供上次成功同步的時間戳，且可與採集時的時鐘可靠比較，再換算為秒。無法確認時省略欄位並記錄於 `error`。 |
+| `cpu.features` | 執行期偵測的 CPU 運算指令集。x86_64 包含 SSE、AVX／AVX2、FMA、F16C 和部分 AVX-512 能力。ARM64 包含 NEON、FP16、Dot Product、SVE／SVE2、BF16 和 I8MM。 |
+| `gpu[].compute_capability` | NVIDIA CUDA Compute Capability，以 `major.minor` 字串表示，例如 `"8.6"`。Linux 優先用 NVML，再由白名單 `nvidia-smi` 按 PCI 位址查詢。Windows 使用系統目錄的 CUDA Driver API，按 DXGI 的 LUID 配對。NVIDIA GPU 無法確認時省略並記錄於 `error`。 |
+| `distribution.libc` | Linux 發行版預設使用的 C 執行期類型，例如 `glibc` 或 `musl`。 |
+| `distribution.libc_version` | 上述 C 執行期的版本字串，例如 `"2.39"`。以目前執行環境的系統 libc 為準。 |
+| `runtime.open_files_limit` | Linux／macOS 目前程序的檔案描述符軟上限，由 `getrlimit(RLIMIT_NOFILE)` 取得。無上限時省略。 |
+
+目前時間同步欄位支援 Linux 的 systemd-timesyncd。NTP 目標使用白名單的 `timedatectl show-timesync`，同步時間使用本次開機成功同步記錄的修改時間。其他服務或平台無法確認時會省略欄位並記錄錯誤。Linux 的 libc 類型和版本由白名單的 `ldd --version` 查詢。
+
 ## 編譯
 
 需要 Rust 1.88 或更新版本，以及目標平台的 C 編譯器。HTTPS 使用靜態連結的 `ring`。Linux 跨架構編譯可用 Clang，並透過 `CC_<target>` 和 `AR_<target>` 指定工具，環境變數中的目標名稱以底線取代連字號。Windows ARM64 編譯需安裝 Clang。從專案目錄執行以下命令，讓 Cargo 載入專案的目標設定。
