@@ -473,25 +473,63 @@
         .replace(/"/g, "&quot;");
     }
 
-    function buildDownloadCommand(binary, run = false) {
+    function buildDownloadCommand(binary) {
       const url = new URL(binary.path, window.location.href).href;
       const name = binary.downloadName || binary.name;
       if (binary.target.includes("-windows-")) {
         const quote = (value) => "'" + value.replace(/'/g, "''") + "'";
         const file = quote(".\\" + name);
-        const download = `Invoke-WebRequest -Uri ${quote(url)} -OutFile ${file} -ErrorAction Stop`;
-        return run ? `& { ${download}; & ${file} }` : download;
+        return `Invoke-WebRequest -Uri ${quote(url)} -OutFile ${file} -ErrorAction Stop`;
       }
       const quote = (value) => "'" + value.replace(/'/g, "'\\''") + "'";
       const file = quote("./" + name);
-      const download = `curl -fsSL ${quote(url)} -o ${file} && chmod +x ${file}`;
-      return run ? `${download} && ${file}` : download;
+      return `curl -fsSL ${quote(url)} -o ${file} && chmod +x ${file}`;
     }
 
-    function binaryPlatform(binary) {
-      if (binary.target.endsWith("-apple-darwin")) return "macOS";
-      if (binary.target.includes("-windows-")) return "Windows PowerShell";
-      return "Linux";
+    function directRunExamples(binaries) {
+      const urls = Object.fromEntries(binaries.map((binary) =>
+        [binary.target, new URL(binary.path, window.location.href).href]
+      ));
+      const shQuote = (value) => "'" + value.replace(/'/g, "'\\''") + "'";
+      const psQuote = (value) => "'" + value.replace(/'/g, "''") + "'";
+      const unixTargets = [
+        ["Linux-x86_64", "x86_64-unknown-linux-musl"],
+        ["Linux-aarch64|Linux-arm64", "aarch64-unknown-linux-musl"],
+        ["Darwin-x86_64", "x86_64-apple-darwin"],
+        ["Darwin-arm64|Darwin-aarch64", "aarch64-apple-darwin"],
+      ];
+      return [
+        ["Linux／macOS", [
+          "(",
+          '  case "$(uname -s)-$(uname -m)" in',
+          ...unixTargets.map(([platform, target]) =>
+            "    " + platform + ") url=" + shQuote(urls[target]) + " ;;"
+          ),
+          '    *) printf "%s\\n" "不支援的作業系統或架構" >&2; exit 1 ;;',
+          "  esac",
+          '  dir=$(mktemp -d "${TMPDIR:-/tmp}/sys-info.XXXXXXXX") || exit 1',
+          "  trap 'rm -rf \"$dir\"' 0",
+          '  curl -fsSL "$url" -o "$dir/sys-info" &&',
+          '    chmod +x "$dir/sys-info" && "$dir/sys-info"',
+          ")",
+        ].join("\n")],
+        ["Windows PowerShell", [
+          "& {",
+          "  $url = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) {",
+          "    'X64' { " + psQuote(urls["x86_64-pc-windows-msvc"]) + " }",
+          "    'Arm64' { " + psQuote(urls["aarch64-pc-windows-msvc"]) + " }",
+          "    default { throw '不支援的 Windows 架構' }",
+          "  }",
+          "  $file = Join-Path ([IO.Path]::GetTempPath()) ('sys-info-' + [Guid]::NewGuid() + '.exe')",
+          "  try {",
+          "    Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $file -ErrorAction Stop",
+          "    & $file",
+          "  } finally {",
+          "    Remove-Item -LiteralPath $file -ErrorAction SilentlyContinue",
+          "  }",
+          "}",
+        ].join("\n")],
+      ];
     }
 
     function renderProjects(filterText = "") {
@@ -571,12 +609,12 @@
 
           const commandsHtml = proj.downloadAndRun && binCount
             ? `
-                <div class="section-label">指令使用範例</div>
-                ${proj.binaries.map((binary) => {
-                  const command = escapeHtml(buildDownloadCommand(binary, true));
+                <div class="section-label">直接執行範例</div>
+                ${directRunExamples(proj.binaries).map(([platform, example]) => {
+                  const command = escapeHtml(example);
                   return `
                     <div class="bin-top">
-                      <span>${escapeHtml(binaryPlatform(binary))} · ${escapeHtml(binary.arch)}</span>
+                      <span>${escapeHtml(platform)}</span>
                       <button type="button" class="btn-copy" data-command="${command}">複製指令</button>
                     </div>
                     <pre class="code-block"><code>${command}</code></pre>
