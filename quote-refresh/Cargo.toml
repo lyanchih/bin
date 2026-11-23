@@ -1,0 +1,14 @@
+[package]
+name = "quote-refresh"
+version = "0.1.0"
+edition = "2021"
+description = "Kick off AI agent 5h quota windows with a minimal prompt and show reset countdowns (Codex, Claude, Cursor, Antigravity)"
+
+[dependencies]
+ureq = { version = "3.5", default-features = false, features = ["rustls-no-provider", "rustls-webpki-roots"] }
+rustls-rustcrypto = "0.0.2-alpha"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

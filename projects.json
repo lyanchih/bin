@@ -150,5 +150,46 @@
         "note": "Windows ARM64"
       }
     ]
+  },
+  {
+    "id": "quote-refresh",
+    "name": "quote-refresh",
+    "title": "AI 訂閱額度恢復週期刷新器",
+    "language": "Rust",
+    "tags": ["Rust", "musl-static", "cron", "Claude", "Codex", "Cursor", "Antigravity"],
+    "summary": "於額度尚未消耗時自動發出最小問答，提前啟動 agent 的五小時恢復週期，並顯示剩餘恢復時間。",
+    "description": [
+      "已有消耗待恢復：直接顯示剩餘時間與恢復時刻",
+      "尚未消耗：發出最省 token 的問答 (Claude 用 haiku、無工具) 後再次確認，仍未進入恢復週期則回報錯誤並以非零結束碼退出",
+      "支援 Agent：codex、claude、cursor、antigravity (anti)；Cursor 無五小時視窗 API，以本地紀錄假設五小時週期",
+      "零外部執行期依賴：musl 完全靜態連結，內建純 Rust TLS"
+    ],
+    "usage": [
+      "quote-refresh                  # 預設 codex claude",
+      "quote-refresh claude cursor anti",
+      "# crontab：週一至週五 06:15",
+      "15 6 * * 1-5 $HOME/bin/quote-refresh >> $HOME/.cache/quote-refresh.log 2>&1"
+    ],
+    "sourceDir": "quote-refresh/",
+    "binaries": [
+      {
+        "name": "quote-refresh",
+        "arch": "x86_64 (amd64)",
+        "target": "x86_64-unknown-linux-musl",
+        "path": "bin/quote-refresh",
+        "downloadName": "quote-refresh",
+        "size": "2.4 MB",
+        "note": "Linux x86_64 完全靜態執行檔 (Static-PIE)"
+      },
+      {
+        "name": "quote-refresh-aarch64",
+        "arch": "ARM64 (aarch64)",
+        "target": "aarch64-unknown-linux-musl",
+        "path": "bin/quote-refresh-aarch64",
+        "downloadName": "quote-refresh-aarch64",
+        "size": "2.0 MB",
+        "note": "Linux ARM64 完全靜態執行檔 (Static)"
+      }
+    ]
   }
 ]

@@ -1,0 +1,16 @@
+[Unit]
+Description=Kick off AI agent 5h quota windows (quote-refresh)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=acclyan
+Environment=HOME=/home/acclyan
+# 從待機喚醒後 Wi-Fi 需要數秒重連，最多等 120 秒
+ExecStartPre=/bin/sh -c 'for i in $$(seq 60); do getent hosts chatgpt.com >/dev/null && exit 0; sleep 2; done; exit 0'
+ExecStart=/home/acclyan/repos/bin/bin/quote-refresh
+StandardOutput=append:/home/acclyan/.cache/quote-refresh.log
+StandardError=append:/home/acclyan/.cache/quote-refresh.log
+# 若是被 timer 從待機/休眠喚醒 (10 分鐘內剛恢復)，跑完後回到原本的睡眠狀態
+ExecStopPost=+/bin/sh -c 'op=$$(journalctl -q -o cat -u systemd-suspend.service -u systemd-hibernate.service --since -10min | sed -n "s/.*returned from sleep operation .\\([a-z-]*\\)..*/\\1/p" | tail -1); [ -n "$$op" ] && systemctl "$$op"; exit 0'

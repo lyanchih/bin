@@ -1,0 +1,13 @@
+[Unit]
+Description=Run quote-refresh Mon-Fri 06:15 (wakes from suspend)
+
+[Timer]
+OnCalendar=Mon..Fri 06:15
+AccuracySec=1s
+# 從待機 (suspend) 喚醒執行
+WakeSystem=true
+# 關機錯過時，開機後補跑
+Persistent=true
+
+[Install]
+WantedBy=timers.target

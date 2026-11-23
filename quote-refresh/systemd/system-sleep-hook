@@ -1,0 +1,9 @@
+#!/bin/sh
+# 休眠 (hibernate) 時核心不會替 WakeSystem 設定 RTC，改由此處設定 RTC 喚醒
+[ "$1" = pre ] || exit 0
+[ "$2" = hibernate ] || exit 0
+next=$(systemctl show quote-refresh.timer -P NextElapseUSecRealtime)
+[ -n "$next" ] || exit 0
+ts=$(date -d "$next" +%s) || exit 0
+echo 0 > /sys/class/rtc/rtc0/wakealarm
+echo $((ts - 60)) > /sys/class/rtc/rtc0/wakealarm
