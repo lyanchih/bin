@@ -74,10 +74,20 @@ fn main() -> ExitCode {
 
 /// 回傳 (恢復時間, 是否由本次問答啟動)
 fn refresh(agent: Agent) -> Result<(i64, bool), String> {
-    if let Some(reset) = agent.pending_reset()? {
-        return Ok((reset, false));
-    }
-    agent.kick()?;
+    // 查詢失敗 (如 token 過期) 也照樣發問：CLI 執行時會自行更新 token
+    let probe_err = if agent.token_expired() {
+        Some("token 已過期".to_string())
+    } else {
+        match agent.pending_reset() {
+            Ok(Some(reset)) => return Ok((reset, false)),
+            Ok(None) => None,
+            Err(e) => Some(e),
+        }
+    };
+    agent.kick().map_err(|e| match &probe_err {
+        Some(p) => format!("{e} (先前查詢失敗: {p})"),
+        None => e,
+    })?;
     for attempt in 0..VERIFY_ATTEMPTS {
         if attempt > 0 {
             thread::sleep(VERIFY_DELAY);

@@ -1,8 +1,8 @@
 [Unit]
-Description=Run quote-refresh Mon-Fri 06:15 (wakes from suspend)
+Description=Run quote-refresh Mon-Fri 08:00 (wakes from suspend)
 
 [Timer]
-OnCalendar=Mon..Fri 06:15
+OnCalendar=Mon..Fri 08:00
 AccuracySec=1s
 # 從待機 (suspend) 喚醒執行
 WakeSystem=true

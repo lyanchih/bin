@@ -167,8 +167,8 @@
     "usage": [
       "quote-refresh                  # 預設 codex claude",
       "quote-refresh claude cursor anti",
-      "# crontab：週一至週五 06:15",
-      "15 6 * * 1-5 $HOME/bin/quote-refresh >> $HOME/.cache/quote-refresh.log 2>&1"
+      "# 週一至週五 08:00 自動執行 (可從待機/休眠喚醒，13:00 重置額度)",
+      "sudo quote-refresh/systemd/install.sh"
     ],
     "sourceDir": "quote-refresh/",
     "binaries": [

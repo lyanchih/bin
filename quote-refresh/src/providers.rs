@@ -53,6 +53,14 @@ impl Agent {
         }
     }
 
+    /// 憑證已知過期時直接跳過查詢 (目前僅 Claude 憑證帶有 expiresAt)
+    pub fn token_expired(self) -> bool {
+        match self {
+            Self::Claude => claude_token_expired(),
+            _ => false,
+        }
+    }
+
     /// 發出最簡單的問答以啟動恢復週期
     pub fn kick(self) -> Result<(), String> {
         match self {
@@ -114,6 +122,16 @@ fn future(ts: Option<i64>) -> Option<i64> {
 }
 
 // ---------- Claude ----------
+
+fn claude_token_expired() -> bool {
+    let Ok(doc) = home_dir().and_then(|h| read_json(&h.join(".claude").join(".credentials.json"))) else {
+        return false;
+    };
+    doc.get("claudeAiOauth")
+        .and_then(|o| o.get("expiresAt"))
+        .and_then(|v| v.as_f64())
+        .is_some_and(|ms| (ms / 1000.0) as i64 <= now_unix() + 60)
+}
 
 fn claude_pending() -> Result<Option<i64>, String> {
     let doc = read_json(&home_dir()?.join(".claude").join(".credentials.json"))?;
